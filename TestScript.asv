@@ -12,8 +12,14 @@ hold on;
 
 %Init class
 BlueRov = AUV;
-BlueRov.sparseTraverse(10,world,'E','S')
+
+BlueRov.sparseTraverse(5,world,'E','S')
 z = ones(size(BlueRov.previous_x)) * 0.3;
-plot3(BlueRov.previous_x, BlueRov.previous_y,z,'r');
+plot3(BlueRov.previous_x, BlueRov.previous_y, z);
 hold off;
 
+figure
+[px,py] = gradient(world);
+hold on
+quiver(px,py)
+hold off

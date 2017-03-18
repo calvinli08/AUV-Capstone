@@ -69,9 +69,51 @@ classdef AUV < handle
             
         end
         
+        function direction = switchDirection(thisAUV,direction)
+            switch direction
+                case 'S'
+                    direction = 'N';
+                case 'N'
+                    direction = 'S';
+                case 'E'
+                    direction = 'W';
+                case 'W'
+                    direction = 'E';
+            end
+        
+        end
+        
         function sample(thisAUV, world)
             thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) = world(thisAUV.position_x,thisAUV.position_y);
         end
+        
+        function sparseTraverse(thisAUV, step_size, world, direction_long, direction_short)
+            %Goes down the full length of direction_long
+            %Traverses direction_short for step_size duration
+            switch direction_long
+                case {'E','W'}
+                    long_lim = thisAUV.border_y;
+                    short_lim = thisAUV.border_x;
+                otherwise
+                    long_lim = thisAUV.border_x;
+                    short_lim = thisAUV.border_y;
+            end
+            %Need a condition to stop sparseTraverse if high pollution is
+            %detected
+            for j = 1:step_size:short_lim
+                for i = 1 : long_lim - 1
+                    thisAUV.sample(world)
+                    thisAUV.traverse(direction_long);
+                end
+                direction_long = thisAUV.switchDirection(direction_long);
+                for x = 1:step_size
+                    thisAUV.sample(world)
+                    thisAUV.traverse(direction_short)
+                end
+            end
+        end
+        
+
     end
     
 end
