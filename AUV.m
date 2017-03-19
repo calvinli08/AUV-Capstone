@@ -38,7 +38,7 @@ classdef AUV < handle
             %Directions are based on array coordinates
             switch direction
                 case 'S'
-                    if(thisAUV.position_x + thisAUV.velocity <= thisAUV.border_x)
+                    if(thisAUV.position_x + thisAUV.velocity < thisAUV.border_x)
                         thisAUV.position_x = thisAUV.position_x + thisAUV.velocity;
                     else
                         warning('Reached edge')
@@ -50,7 +50,7 @@ classdef AUV < handle
                        warning('Reached edge')
                     end
                 case 'E'
-                    if(thisAUV.position_y + thisAUV.velocity <= thisAUV.border_y)
+                    if(thisAUV.position_y + thisAUV.velocity < thisAUV.border_y)
                         thisAUV.position_y = thisAUV.position_y + thisAUV.velocity;
                     else
                        warning('Reached edge')
