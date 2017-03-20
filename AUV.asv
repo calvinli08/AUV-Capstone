@@ -3,8 +3,8 @@ classdef AUV < handle
     %   Detailed explanation goes here
     
     properties
-        position_x % Row
-        position_y % Column
+        position_x % Column
+        position_y % Row
         previous_x %for graphing 
         previous_y %for graphing 
         velocity  %Step size for traversal
@@ -36,10 +36,8 @@ classdef AUV < handle
   
         end
         
-        %Traverses by velocity amount
         function traverse(thisAUV, direction)  
-            %N,S traverses rows, E,W traverses Columns.  We are assuming
-            %1,1 is the top left corner of the array
+            %N,S traverses 
             switch direction
                 case 'S'
                     if(thisAUV.position_x + thisAUV.velocity <= thisAUV.border_x)
@@ -90,7 +88,7 @@ classdef AUV < handle
         
         %Grabs a sample
         function sample(thisAUV, world)
-            if(thisAUV.position_x <= thisAUV.border_x && thisAUV.position_y <= thisAUV.border_y)
+            if(thisAUV.position_x <= thisAUV.bound_x && thisAUV.position_y <= thisAUV.bound_y)
                 thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) = world(thisAUV.position_x,thisAUV.position_y);
             end
         end
@@ -110,29 +108,18 @@ classdef AUV < handle
             %Need a condition to stop sparseTraverse if high pollution is
             %detected
             for j = 1:step_size:short_lim
-                %Long
                 for i = 1 : long_lim - 1
                     thisAUV.sample(world)
                     thisAUV.traverse(direction_long);
                 end
                 direction_long = thisAUV.switchDirection(direction_long);
-                %Short
                 for x = 1:step_size
                     thisAUV.sample(world)
                     thisAUV.traverse(direction_short)
                 end
             end
-            
-           for i = 1 : long_lim
-                thisAUV.sample(world)
-                thisAUV.traverse(direction_long);
-           end
-            
         end
         
-        function gradient(thisAUV)
-            
-        end
         
         
 
