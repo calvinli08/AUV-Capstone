@@ -13,7 +13,7 @@ hold on;
 %% Phase 1 Test - Sparse Traversal Function
 %Init class
 BlueRov = AUV;
-BlueRov.sparseTraverse(10,world,'E','S')
+BlueRov.sparseTraverse(10,0.3,world,'E','S')
 z = ones(size(BlueRov.previous_x)) * 0.3;
 plot3(BlueRov.previous_x, BlueRov.previous_y,z,'r');
 hold off;
@@ -33,3 +33,4 @@ quiver(ppx,ppy);
 title('Sparse Traversal Gradients');
 xlim([0,100]);
 ylim([0,100]);
+
