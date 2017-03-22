@@ -95,6 +95,23 @@ classdef AUV < handle
         
         end
         
+                % Function takes in a direction and flips it.
+        function direction = rotatecw(direction)
+            switch direction
+                case 'N'
+                    direction = 'E';
+                case 'E'
+                    direction = 'S';
+                case 'S'
+                    direction = 'W';
+                case 'W'
+                    direction = 'N';
+            end
+        
+        end
+        
+        
+        
         %Takes the value at the current position in the world and fills it
         %into current_knowledge.
         %I would like it to also fill in points of interest
@@ -103,6 +120,33 @@ classdef AUV < handle
                 thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) = world(thisAUV.position_x,thisAUV.position_y);
             end
         end
+        %Square Traversal
+        %step_size is the additional amount it traverses down the longest
+        %path in the square. In other words, the 'space' between squares.
+        %world - 2d Array of the world
+        %target point - this is the interest point from which we wish to
+        %begin our traversal.
+        function squareTraverse( thisAUV, step_size, end_point, threshold, world, targetPoint)
+            ptp(thisAUV, targetPoint);
+            direction = 'N';
+            for n = 1 : end_point
+                for m = 1:2
+                    for i = 1 : n
+                    thisAUV.sample(world)
+                    thisAUV.traverse(direction)
+                    end
+                    direction = rotatecw(direction);
+                end
+            end
+        end
+        
+        %Point to point traversal
+        %thisAUV is the auv in question, with its current location.
+        function ptp( thisAUV, targetPoints)
+           disp('We might want to use some sort of A*');
+            
+        end
+        
         
         %Sparse Traversal
         %step_size is the amount it traverses down the short length of the
