@@ -104,9 +104,7 @@ classdef AUV < handle
             end
         end
         
-        %General Traverse Function used for both sparse and dense
-        %traversals
-        
+        %Sparse Traversal
         %step_size is the amount it traverses down the short length of the
         % lawnmower traversal.
         %threshold - Value that represents a critical amount of pollution;
@@ -114,33 +112,6 @@ classdef AUV < handle
         %World - 2d Array of the world
         %direction_long - the long direction of our lawnmower traversal
         %direction_short - the short side of our lawnmower traversal
-        %long_bound - defines the area to traverse
-        %short_bound - defines the area to traverse
-        function lawnmowerTraverse(thisAUV, step_size,threshold, world, direction_long, direction_short,long_lim,short_lim)
-           for j = 1:step_size:short_lim
-                %Long
-                for i = 1 : long_lim - 1
-                    thisAUV.sample(world)
-                    thisAUV.traverse(direction_long);
-                end
-                %Go the other way
-                direction_long = thisAUV.switchDirection(direction_long);
-                %Short
-                for x = 1:step_size
-                    thisAUV.sample(world)
-                    thisAUV.traverse(direction_short)
-                end
-           end 
-           % The last leg of the traversal.  Comment this out and see what
-           % happens on the figure; we lose the last row of data.
-           % If you have a better solution please feel free this fix this
-           for i = 1 : long_lim
-                thisAUV.sample(world)
-                thisAUV.traverse(direction_long);
-           end
-        end
-        
-        
         function sparseTraverse(thisAUV, step_size,threshold, world, direction_long, direction_short)
             %Goes down the full length of direction_long
             %Traverses direction_short for step_size duration
@@ -153,9 +124,33 @@ classdef AUV < handle
                     long_lim = thisAUV.border_x;
                     short_lim = thisAUV.border_y;
             end
-            thisAUV.lawnmowerTraverse(step_size,threshold, world, direction_long, direction_short,long_lim,short_lim);
-            % if(POLLUTION)
-            % DENSE TRAVERSE
+            
+            
+            %Need a condition to stop sparseTraverse if high pollution is
+            %detected
+            for j = 1:step_size:short_lim
+                %Long
+                for i = 1 : long_lim - 1
+                    thisAUV.sample(world)
+                    thisAUV.traverse(direction_long);
+                end
+                %Go the other way
+                direction_long = thisAUV.switchDirection(direction_long);
+                %Short
+                for x = 1:step_size
+                    thisAUV.sample(world)
+                    thisAUV.traverse(direction_short)
+                end
+            end
+            
+           % The last leg of the traversal.  Comment this out and see what
+           % happens on the figure; we lose the last row of data.
+           % If you have a better solution please feel free this fix this
+           for i = 1 : long_lim
+                thisAUV.sample(world)
+                thisAUV.traverse(direction_long);
+           end
+            
         end
         
         %Rates the pollution level
