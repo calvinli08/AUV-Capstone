@@ -18,6 +18,10 @@ z = ones(size(BlueRov.previous_x)) * 0.3;
 plot3(BlueRov.previous_x, BlueRov.previous_y,z,'r');
 hold off;
 
+%% Phase 2 Test - Gather POIs
+figure
+scatter(BlueRov.points_of_interest(1,:),BlueRov.points_of_interest(2,:) )
+title('Points of Interest');
 
 %% Phase 2 Test - Gradients
 figure
@@ -48,10 +52,7 @@ I = nearestneighbour(P,X);
 disp(X(:,I)) %Expected 1,2
 %Nice it works
 
-%% Phase 2 Test - Gather POIs
-figure
-scatter(BlueRov.points_of_interest(1,:),BlueRov.points_of_interest(2,:) )
-title('Points of Interest');
+
 
 %% Phase 2 Test - Square(Dense) Traverse Test
 SquareTrav = AUV;
@@ -61,4 +62,14 @@ z = ones(size(SquareTrav.previous_x)) * 0.3;
 figure
 plot3(SquareTrav.previous_x, SquareTrav.previous_y,z,'r');
 
+
 %% Phase 2 Test 
+a = [0.3, 0.7]
+for i = 1:100
+    for j = 1:100
+        if(a(1) < BlueRov.current_knowledge(i,j)) && (a(2) > BlueRov.current_knowledge(i,j))
+            disp('Ues');
+        end
+    end
+end
+

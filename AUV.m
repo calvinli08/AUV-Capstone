@@ -31,7 +31,7 @@ classdef AUV < handle
                     bound_x = 100;
                     bound_y = 100;
                 end
-                
+             
                 obj.position_x = x;
                 obj.position_y = y;
                 obj.previous_x = x;
@@ -40,7 +40,7 @@ classdef AUV < handle
                 obj.border_x = bound_x;
                 obj.border_y = bound_y;
                 obj.current_knowledge = zeros(bound_x,bound_y);
-                
+                obj.points_of_interest = [];
         end
         
         %Traverses by velocity amount
@@ -118,7 +118,7 @@ classdef AUV < handle
         %I would like it to also fill in points of interest
         function sample(thisAUV, world)
             
-            if ((thisAUV.position_x <= thisAUV.border_x && thisAUV.position_y <= thisAUV.border_y) || (thisAUV.position_x > 0 && thisAUV.position_y > 0)) 
+            if ((thisAUV.position_x <= thisAUV.border_x) && (thisAUV.position_y <= thisAUV.border_y)) && ((thisAUV.position_x > 0) && (thisAUV.position_y > 0)) 
                 thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) = world(thisAUV.position_x,thisAUV.position_y);
             end
         end
@@ -215,12 +215,13 @@ classdef AUV < handle
                 %Long
                 for i = 1 : long_lim - 1
                     thisAUV.sample(world)
-                    thisAUV.traverse(direction_long);
-                    %Point of Interest is a value between 0.3 to 0.7
-                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
                     breaktraverse = thisAUV.fill_POI(threshold);
                     if breaktraverse == 1
                     end
+                    thisAUV.traverse(direction_long);
+                    %Point of Interest is a value between 0.3 to 0.7
+                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
+                   
                  end
              
                 %Go the other way
@@ -228,12 +229,13 @@ classdef AUV < handle
                 %Short
                 for x = 1:step_size
                     thisAUV.sample(world)
-                    thisAUV.traverse(direction_short)
-                    %Point of Interest is a value between 0.3 to 0.7
-                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
                     breaktraverse = thisAUV.fill_POI(threshold);
                     if breaktraverse == 1
                     end
+                    thisAUV.traverse(direction_short)
+                    %Point of Interest is a value between 0.3 to 0.7
+                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
+                   
                 end
             end
             
@@ -242,13 +244,14 @@ classdef AUV < handle
            % If you have a better solution please feel free this fix this
            for i = 1 : long_lim
                 thisAUV.sample(world)
+                breaktraverse = thisAUV.fill_POI(threshold);
+                if breaktraverse == 1
+                end
                 thisAUV.traverse(direction_long);
 
                  %Point of Interest is a value between 0.3 to 0.7
                     %breaktraverse = 0; If > 0.7 breaktraverse = 1;
-                 breaktraverse = thisAUV.fill_POI(threshold);
-                 if breaktraverse == 1
-                 end
+                 
            end
             
         end
@@ -257,10 +260,11 @@ classdef AUV < handle
         
         function break_traverse = fill_POI(thisAUV,threshold)
             break_traverse = 0; 
-            if ((thisAUV.position_x <= thisAUV.border_x && thisAUV.position_y <= thisAUV.border_y) || (thisAUV.position_x > 0 && thisAUV.position_y > 0)) 
-                        if (threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y)) && (thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2))
-                           
+            if ((thisAUV.position_x <= thisAUV.border_x && thisAUV.position_y <= thisAUV.border_y) && (thisAUV.position_x > 0 && thisAUV.position_y > 0)) 
+                       
+                        if (threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y))
                             thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
+                           
                         
                         elseif thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) >= threshold(2)
                             thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
