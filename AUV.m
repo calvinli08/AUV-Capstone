@@ -143,37 +143,40 @@ classdef AUV < handle
         %Point to point traversal
         %thisAUV is the auv in question, with its current location.
         function ptp( thisAUV, targetPointx, targetPointy)
-            x = targetPointx - thisAUV.position_x;
-            y = targetPointy - thisAUV.position_y;
-            absx = Abs(x);
-            absy = Abs(y);
-            directionh = 'E';
-            directionv = 'N';
-            if (targetPointx < thisAUV.position_x)
-                directionh = 'W';
-            else 
+            
+            if(targetPointx <= thisAUV.bound_x && targetPointy <= thisAUV.bound_y)
+                x = targetPointx - thisAUV.position_x;
+                y = targetPointy - thisAUV.position_y;
+                absx = abs(x);
+                absy = abs(y);
                 directionh = 'E';
-            end
-            if (targetPointy < thisAUV.position_y)
                 directionv = 'S';
-            else 
-                directionv = 'N';
-            end
+                if (targetPointx < thisAUV.position_x)
+                    directionh = 'W';
+                else 
+                    directionh = 'E';
+                end
+                if (targetPointy < thisAUV.position_y)
+                    directionv = 'N';
+                else 
+                    directionv = 'S';
+                end
 
-            while( absx > 0 && absy > 0 )
-                %Travel in a diagonal towards the goal
-                absx--;
-                absy--;
-                thisAUV.traverse(directionh);
-                thisAUV.traverse(directionv);
-            end
-            while(absx > 0)
-                thisAUV.traverse(directionh);
-                absx--;
-            end
-            while(absy > 0)
-                thisAUV.traverse(directionv);
-                absy--;
+                while( absx > 0 && absy > 0 )
+                    %Travel in a diagonal towards the goal
+                    absx = absx - 1;
+                    absy = absy - 1;
+                    thisAUV.traverse(directionh);
+                    thisAUV.traverse(directionv);
+                end
+                while(absx > 0)
+                    thisAUV.traverse(directionh);
+                    absx = absx - 1;
+                end
+                while(absy > 0)
+                    thisAUV.traverse(directionv);
+                    absy = absy - 1;
+                end
             end
         end
         
