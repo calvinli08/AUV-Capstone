@@ -129,17 +129,20 @@ classdef AUV < handle
         %world - 2d Array of the world
         %target point - this is the interest point from which we wish to
         %begin our traversal.
-        function squareTraverse( thisAUV,step_size, end_point, world)
-            
+
+        function squareTraverse( thisAUV, step_size, end_point, world)
             direction = 'N';
             for n = 1 : end_point
-                for m = 1:2
-                    for i = 1 : n
+                for i = 1 : n
                     thisAUV.sample(world)
                     thisAUV.traverse(direction)
-                    end
-                    direction = thisAUV.rotatecw(direction);
                 end
+                direction = thisAUV.rotatecw(direction);
+                for i = 1 : n+step_size
+                    thisAUV.sample(world)
+                    thisAUV.traverse(direction)
+                end
+                direction = thisAUV.rotatecw(direction);
             end
         end
         
