@@ -16,7 +16,8 @@ classdef AUV < handle
         border_x  % World Boundary - used for sparse traversal.  
         border_y  % World Boundary - used for sparse traversal
         current_knowledge % Raw Knowledge of the world
-        points_of_interest % Either just the coordinates or a full array.  I'm using a full array right now.
+        points_of_interest % Queue of points
+        pollution_sources % Array that holds pollution sources that we are certain of. Filled after dense traversal.
     end
     
     methods
@@ -142,7 +143,7 @@ classdef AUV < handle
         
         %Point to point traversal
         %thisAUV is the auv in question, with its current location.
-        function ptp( thisAUV, targetPointx, targetPointy)
+        function point_to_point( thisAUV, targetPointx, targetPointy)
             
             if(targetPointx <= thisAUV.bound_x && targetPointy <= thisAUV.bound_y)
                 x = targetPointx - thisAUV.position_x;
@@ -230,25 +231,7 @@ classdef AUV < handle
             
         end
         
-        %Rates the pollution level
-        function level = pollution_level(thisAUV,pollution_value)
-            if(pollution_value <= 0.3)
-                level = 0;
-            else
-                level = 1;
-            %elseif(pollution_value <= 0.44)
-            %    level = 1;
-            %elseif (pollution_value <= 0.58)
-            %    level = 2;
-            %elseif (pollution_value <= 0.72)
-            %    level = 3;
-            %elseif (pollution_value <= 0.86)
-            %    level = 4;
-            %elseif (pollution_value <= 1)
-            %    level = 5;
-            
-            end
-        end
+      
         
         
 

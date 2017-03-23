@@ -40,3 +40,6 @@ PointtoPoint.ptp(50,50);
 z = ones(size(PointtoPoint.previous_x)) * 0.3;
 figure
 plot3(PointtoPoint.previous_x, PointtoPoint.previous_y,z,'r');
+
+%% Phase 2 Test - Nearest Neighbor
+
