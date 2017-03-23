@@ -36,7 +36,7 @@ ylim([0,100]);
 
 %% Phase 2 Test - Point to Point
 PointtoPoint = AUV;
-PointtoPoint.point_to_point(50,50);
+PointtoPoint.ptp(50,50);
 z = ones(size(PointtoPoint.previous_x)) * 0.3;
 figure
 plot3(PointtoPoint.previous_x, PointtoPoint.previous_y,z,'r');
@@ -44,19 +44,5 @@ plot3(PointtoPoint.previous_x, PointtoPoint.previous_y,z,'r');
 %% Phase 2 Test - Nearest Neighbor
 P = [1;1]
 X = [1, 2, 3; 2, 2, 2];
-I = nearestneighbour(P,X);
-disp(X(:,I)) %Expected 1,2
-%Nice it works
+I = nearestneighbour(P,X
 
-%% Phase 2 Test - Gather POIs
-P = [1;1];
-P = [P,[1;1]]
-
-%% Phase 2 Test - Square Traverse Test
-SquareTrav = AUV;
-SquareTrav.point_to_point(50,50);
-SquareTrav.squareTraverse(5,5,world);
-z = ones(size(SquareTrav.previous_x)) * 0.3;
-figure
-plot3(SquareTrav.previous_x, SquareTrav.previous_y,z,'r');
-gradient()

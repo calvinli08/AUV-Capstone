@@ -129,9 +129,9 @@ classdef AUV < handle
         %world - 2d Array of the world
         %target point - this is the interest point from which we wish to
         %begin our traversal.
-        function squareTraverse( thisAUV,step_size, end_point, world)
+        function squareTraverse( thisAUV, step_size, end_point, world)
             
-            direction = 'N';
+            direction = 'S';
             for n = 1 : end_point
                 for m = 1:2
                     for i = 1 : n
@@ -147,7 +147,7 @@ classdef AUV < handle
         %thisAUV is the auv in question, with its current location.
         function point_to_point(thisAUV, targetPointx, targetPointy)
             
-            if(targetPointx <= thisAUV.border_x && targetPointy <= thisAUV.border_y)
+            if(targetPointx <= thisAUV.boundar_x && targetPointy <= thisAUV.bound_y)
                 x = targetPointx - thisAUV.position_x;
                 y = targetPointy - thisAUV.position_y;
                 absx = abs(x);
