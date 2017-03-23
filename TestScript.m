@@ -13,7 +13,7 @@ hold on;
 %% Phase 1 Test - Sparse Traversal Function
 %Init class
 BlueRov = AUV;
-BlueRov.sparseTraverse(10,0.3,world,'E','S')
+BlueRov.sparseTraverse(10,[0.3,0.7],world,'E','S')
 z = ones(size(BlueRov.previous_x)) * 0.3;
 plot3(BlueRov.previous_x, BlueRov.previous_y,z,'r');
 hold off;
@@ -49,14 +49,14 @@ disp(X(:,I)) %Expected 1,2
 %Nice it works
 
 %% Phase 2 Test - Gather POIs
-P = [1;1];
-P = [P,[1;1]]
 
-%% Phase 2 Test - Square Traverse Test
+
+%% Phase 2 Test - Square(Dense) Traverse Test
 SquareTrav = AUV;
 SquareTrav.point_to_point(50,50);
 SquareTrav.squareTraverse(5,5,world);
 z = ones(size(SquareTrav.previous_x)) * 0.3;
 figure
 plot3(SquareTrav.previous_x, SquareTrav.previous_y,z,'r');
-gradient()
+
+%% Phase 2 Test 

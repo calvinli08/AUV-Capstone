@@ -40,7 +40,7 @@ classdef AUV < handle
                 obj.border_x = bound_x;
                 obj.border_y = bound_y;
                 obj.current_knowledge = zeros(bound_x,bound_y);
-                obj.points_of_interest = zeros(bound_x,bound_y);
+                
         end
         
         %Traverses by velocity amount
@@ -217,27 +217,22 @@ classdef AUV < handle
                     thisAUV.sample(world)
                     thisAUV.traverse(direction_long);
                     %Point of Interest is a value between 0.3 to 0.7
-                    if threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2)
-                        thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
+                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
+                    breaktraverse = thisAUV.fill_POI(threshold);
+                    if breaktraverse == 1
                     end
-                    %If greater than 0.7, squareTraverse immediately.
-                    if thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) <= threshold(1)
-                        %Square Traverse
-                    end
-                end
+                 end
+             
                 %Go the other way
                 direction_long = thisAUV.switchDirection(direction_long);
                 %Short
                 for x = 1:step_size
                     thisAUV.sample(world)
                     thisAUV.traverse(direction_short)
-                     if threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2)
-                        thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
-                     end
-                     %If greater than 0.7, squareTraverse immediately.
-                    if thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) <= threshold(1)
-                        %Square Traverse
-                        
+                    %Point of Interest is a value between 0.3 to 0.7
+                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
+                    breaktraverse = thisAUV.fill_POI(threshold);
+                    if breaktraverse == 1
                     end
                 end
             end
@@ -248,22 +243,32 @@ classdef AUV < handle
            for i = 1 : long_lim
                 thisAUV.sample(world)
                 thisAUV.traverse(direction_long);
-                if threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2)
-                   thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
-                end
-                
-                 %If greater than 0.7, squareTraverse immediately.
-                 if thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) <= threshold(1)
-                        %Square Traverse
+
+                 %Point of Interest is a value between 0.3 to 0.7
+                    %breaktraverse = 0; If > 0.7 breaktraverse = 1;
+                 breaktraverse = thisAUV.fill_POI(threshold);
+                 if breaktraverse == 1
                  end
            end
             
         end
         
-      
         
         
+        function break_traverse = fill_POI(thisAUV,threshold)
+            break_traverse = 0; 
+            if ((thisAUV.position_x <= thisAUV.border_x && thisAUV.position_y <= thisAUV.border_y) || (thisAUV.position_x > 0 && thisAUV.position_y > 0)) 
+                        if threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2)
+                            thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
+                        
+                        elseif thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) <= threshold(1)
+                            thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
+                            break_traverse = 1;
+                            
+                        end 
+            end
 
+        end
     end
     
 end
