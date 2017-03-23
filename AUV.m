@@ -257,33 +257,7 @@ classdef AUV < handle
             
         end
         
-        function denseTraverse(thisAUV, world, step_size, EW_distance, NS_distance, direction_short, direction_long)
-            switch direction_long
-                case {'N','S'}
-                    long_lim = NS_distance;
-                    short_lim = EW_distance;
-                otherwise
-                    long_lim = EW_distance;
-                    short_lim = NS_distance;
-            end
-
-            %traverse in the dense region and calculate gradient
-            %traverse long distance
-            for i = 1:step_size:long_lim
-                thisAUV.sample(world);
-                thisAUV.traverse(direction_long);
-            end
-            direction_long = thisAUV.switchDirection(direction_long);
-            %traverse the short distance
-            for j = 1:step_size:short_lim
-                thisAUV.sample(world);
-                thisAUV.traverse(direction_short);
-            end
-
-            %calculate gradient
-
-
-        end
+     
         
         
         
