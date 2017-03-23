@@ -126,8 +126,8 @@ classdef AUV < handle
         %world - 2d Array of the world
         %target point - this is the interest point from which we wish to
         %begin our traversal.
-        function squareTraverse( thisAUV, step_size, end_point, threshold, world, targetPoint)
-            ptp(thisAUV, targetPoint);
+        function squareTraverse( thisAUV, step_size, end_point, threshold, world, targetPointx, targetPointy)
+            ptp(thisAUV, targetPointx, targetPointy);
             direction = 'N';
             for n = 1 : end_point
                 for m = 1:2
@@ -142,9 +142,39 @@ classdef AUV < handle
         
         %Point to point traversal
         %thisAUV is the auv in question, with its current location.
-        function ptp( thisAUV, targetPoints)
-           disp('We might want to use some sort of A*');
-            
+        function ptp( thisAUV, targetPointx, targetPointy)
+            x = targetPointx - thisAUV.position_x;
+            y = targetPointy - thisAUV.position_y;
+            absx = Abs(x);
+            absy = Abs(y);
+            directionh = 'E';
+            directionv = 'N';
+            if (targetPointx < thisAUV.position_x)
+                directionh = 'W';
+            else 
+                directionh = 'E';
+            end
+            if (targetPointy < thisAUV.position_y)
+                directionv = 'S';
+            else 
+                directionv = 'N';
+            end
+
+            while( absx > 0 && absy > 0 )
+                %Travel in a diagonal towards the goal
+                absx--;
+                absy--;
+                thisAUV.traverse(directionh);
+                thisAUV.traverse(directionv);
+            end
+            while(absx > 0)
+                thisAUV.traverse(directionh);
+                absx--;
+            end
+            while(absy > 0)
+                thisAUV.traverse(directionv);
+                absy--;
+            end
         end
         
         
