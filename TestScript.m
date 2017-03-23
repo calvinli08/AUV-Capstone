@@ -13,7 +13,7 @@ hold on;
 %% Phase 1 Test - Sparse Traversal Function
 %Init class
 BlueRov = AUV;
-BlueRov.sparseTraverse(10,[0.3,0.7],world,'E','S')
+BlueRov.sparseTraverse(1,[0.3,0.7],world,'E','S')
 z = ones(size(BlueRov.previous_x)) * 0.3;
 plot3(BlueRov.previous_x, BlueRov.previous_y,z,'r');
 hold off;
@@ -49,7 +49,9 @@ disp(X(:,I)) %Expected 1,2
 %Nice it works
 
 %% Phase 2 Test - Gather POIs
-
+figure
+scatter(BlueRov.points_of_interest(1,:),BlueRov.points_of_interest(2,:) )
+title('Points of Interest');
 
 %% Phase 2 Test - Square(Dense) Traverse Test
 SquareTrav = AUV;

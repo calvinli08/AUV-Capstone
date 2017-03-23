@@ -258,10 +258,11 @@ classdef AUV < handle
         function break_traverse = fill_POI(thisAUV,threshold)
             break_traverse = 0; 
             if ((thisAUV.position_x <= thisAUV.border_x && thisAUV.position_y <= thisAUV.border_y) || (thisAUV.position_x > 0 && thisAUV.position_y > 0)) 
-                        if threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2)
+                        if (threshold(1) < thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y)) && (thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) < threshold(2))
+                           
                             thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
                         
-                        elseif thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) <= threshold(1)
+                        elseif thisAUV.current_knowledge(thisAUV.position_x,thisAUV.position_y) >= threshold(2)
                             thisAUV.points_of_interest = [thisAUV.points_of_interest, [thisAUV.position_x; thisAUV.position_y]];
                             break_traverse = 1;
                             
