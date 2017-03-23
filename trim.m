@@ -1,8 +1,8 @@
 %poi 
 function trim = trim(poi, thresh)
-poi = [1 1; 2 2; 3 3; 4 4; 10 12; 13 14; 22 1; 1 30; 54 54; 600 1];
+%poi = [1 1; 2 2; 3 3; 4 4; 10 12; 13 14; 22 1; 1 30; 54 54; 600 1];
 
-thresh = 2;
+%thresh = 2;
     a = size(poi);
     a = a(1); %a is now the number of rows there are in poi.
     i = 1;
