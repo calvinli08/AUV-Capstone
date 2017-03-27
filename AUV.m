@@ -188,21 +188,14 @@ classdef AUV < handle
         
         
         %sparseTraversal
-        %The length of the lawnmower's short distance and long distance can
-        %be altered by inputting the desired distance into NS_distance and
-        %EW_distance, and by observing the initial orientation of the AUV. 
-        %step_size is the amount it traverses down the short length of the
-        % lawnmower traversal.
         %threshold - Value that represents a critical amount of pollution;
         % we should start a dense traversal if we see this
         %World - 2d Array of the world
         %direction_long - the long direction of our lawnmower traversal
         %direction_short - the short side of our lawnmower traversal
-        %NS_distance - the total distance traveled by the AUV during a
-        %traverse along the North/South direction
-        %EW_distance - the total distance traveled by the AUV during a
-        %traverse along the East/West direction
-        function sparseTraverse(thisAUV, step_size,threshold, world, direction_long, direction_short, NS_distance, EW_distance)
+        %step_size - the amount it traverses down the short length of the
+        % lawnmower traversal.
+        function sparseTraverse(thisAUV, step_size,threshold, world, direction_long, direction_short)
             %Goes down the full length of direction_long
             %Traverses direction_short for step_size duration
             
@@ -223,10 +216,9 @@ classdef AUV < handle
                 for i = 1 : long_lim - 1
                     thisAUV.sample(world)
                     breaktraverse = thisAUV.fill_POI(threshold);
-                    %call lawnmowerTraverse with denser step_size and
-                    %distances
+                    %call denseTraverse
                     if breaktraverse == 1
-                        denseTraverse()
+                        denseTraverse(thisAUV, world, step_size, %NS_distance, %EW_distance, N, W);
                     end
                     thisAUV.traverse(direction_long);
                     %Point of Interest is a value between 0.3 to 0.7
@@ -240,10 +232,9 @@ classdef AUV < handle
                 for x = 1:step_size
                     thisAUV.sample(world);
                     breaktraverse = thisAUV.fill_POI(threshold);
-                    %call lawnmowerTraverse with denser step_size and
-                    %distances
+                    %call denseTraverse
                     if breaktraverse == 1
-                      
+                      denseTraverse(thisAUV, world, step_size, %NS_distance, %EW_distance, N, W);
                     end
                     thisAUV.traverse(direction_short);
                     %Point of Interest is a value between 0.3 to 0.7
@@ -265,7 +256,15 @@ classdef AUV < handle
         
         
         %denseTraverse is called whenever the pollution threshold of an
-        %area during sparseTraverse 
+        %area during sparseTraverse exceeds 0.7
+        %STEP_SIZE - distance traveled down the short edge of the lawnmower
+        %traverse
+        %NS_DISTANCE - the distance of the long edge of the traverse
+        %EW_DISTANCE - the distance of the short edge of the traverse
+        %DIRECTION_LONG - direction faced by the auv during the long edge
+        %of the traverse, either North or South
+        %DIRECTION_SHORT- direction faced by the auv during the short edge
+        %of the traverse, either East or West; usually East
         function denseTraverse(thisAUV, world, step_size, NS_distance, EW_distance, direction_long, direction_short)
           %travel half the distance_long in order to place the AUV in the
           %correct starting position
@@ -273,26 +272,33 @@ classdef AUV < handle
               thisAUV.traverse(direction_long);
               thisAUV.sample(world);
           end    
-          for k = 1:step_size:EW_distance  %traverse the short end
-              for j = 1:step_size
-                  thisAUV.traverse(direction_short);
-                  thisAUV.sample(world);
-              end
+          direction_long = thisAUV.switch_direction(direction_long); 
+          for k = 1:step_size:EW_distance - step_size
               %traverse the short end
               for j = 1:step_size
                   thisAUV.traverse(direction_short);
                   thisAUV.sample(world);
               end
-              
+              %traverse the long edge              
               for i = 1:NS_distance
                   thisAUV.traverse(direction_long);
                   thisAUV.sample(world);
               end
-          
-        
-              
+              direction_long = thisAUV.switch_direction(direction_long);  
                       
           end
+          
+          %Travel half the distance_long again in order to position the AUV
+          %back on the original path it was traveling
+          for m = 1:step_size
+              thisAUV.traverse(direction_short);
+              thisAUV.sample(world);
+          end
+          for l = 1:step_size:NS_distance/2
+              thisAUV.traverse(direction_long);
+              thisAUV.sample(world);
+          end
+              
 
           %calculate the gradient
           calculate_gradient(); 
