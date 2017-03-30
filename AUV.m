@@ -142,12 +142,12 @@ classdef AUV < handle
         function squareTraverse( thisAUV, step_size, end_point, world)
             direction = 'N';
             for n = 1 : end_point
-                for i = 1 :  n+step_size
+                for i = 1 :  n*step_size
                     thisAUV.sample(world);
                     thisAUV.traverse(direction);
                 end
                 direction = thisAUV.rotatecw(direction);
-                for i = 1 : n+step_size
+                for i = 1 : n*step_size
                     thisAUV.sample(world)
                     thisAUV.traverse(direction)
                 end
