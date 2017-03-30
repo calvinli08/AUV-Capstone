@@ -6,6 +6,6 @@ for n = 1:6 % create six regions to add into the world.
     a = genInteres(5);
     b = randi(89,1);
     c = randi(89,1);
-    world(b:b+10,c: c+10) = a;
+    world(b:b+10,c: c+10) = world(b:b+10,c: c+10) + a;
 
 end
