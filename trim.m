@@ -11,10 +11,10 @@ function trim = trim(poi, thresh)
         while j < a
             if(pdist([poi(i,:);poi(j,:)]) < thresh)
                 if( i > 1 ) 
-                    poi(i-1,:) = (poi(i,:) + poi(i-1,:))/2;
+                   % poi(i-1,:) = (poi(i,:) + poi(i-1,:))/2;
                     poi = [poi(1:i-1, :); poi(i+1 : a, :)];
                 else
-                    poi(2,:) = (poi(2,:) + poi(1,:))/2;
+                    %poi(2,:) = (poi(2,:) + poi(1,:))/2;
                     poi = poi(2:a,:);
                 end
                 a = a-1;

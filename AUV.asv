@@ -274,22 +274,15 @@ classdef AUV < handle
            end
            
            %End of the sparese Traverse.  Start Nearest Neighbour.
-           thisAUV.nearestneighbourTraverse(world, dense_traverse_params(1),dense_traverse_params(2),dense_traverse_params(3),direction_long,direction_short);
+            
         end
         
-        function nearestneighbourTraverse(thisAUV,world,step_size, distance_long, distance_short, direction_long, direction_short)
-            thisAUV.points_of_interest = trim(transpose(thisAUV.points_of_interest),3);
-            thisAUV.points_of_interest = transpose(thisAUV.points_of_interest);
-            while(isempty(thisAUV.points_of_interest) == 0)
-                startpoint = [thisAUV.position_x; thisAUV.position_y];
-                columnPOI = nearestneighbour(startpoint,thisAUV.points_of_interest);
-                nextpoint = thisAUV.points_of_interest(:,columnPOI);
-                thisAUV.points_of_interest(:,columnPOI) = []; %delete so we don't get stuck again
-                thisAUV.point_to_point(nextpoint(1),nextpoint(2));
-                %Maybe squareTraverse instead
-                max = thisAUV.denseTraverse(world,step_size,distance_long,distance_short,direction_long,direction_short);
-                thisAUV.pollution_sources = [thisAUV.pollution_sources,max];
-            end
+        function nearestneighbourtraverse(thisAUV)
+            startpoint = [thisAUV.position_x; thisAUV.position_y];
+            columnPOI = nearestneighbour(startpoint,thisAUV.points_of_interest);
+            [x,y] = thisAUV.points_of_interest(:,columnPOI);
+            thisAUV.points_of_interest(:,columnPOI) = []; %delete so we don't get stuck again
+            point_to_point(nextpoint
         end
         
         %denseTraverse is called whenever the pollution threshold of an
