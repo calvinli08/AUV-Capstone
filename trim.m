@@ -25,4 +25,3 @@ function trim = trim(poi, thresh)
         i = i+1;
     end
     trim = poi;
-end

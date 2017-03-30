@@ -79,4 +79,3 @@ DenseAUV.denseTraverse(world,2,10,5,'E','S')
 figure
 plot(DenseAUV.previous_x, DenseAUV.previous_y,'r');
 grid on;
-
