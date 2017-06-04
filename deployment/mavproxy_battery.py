@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+'''Custom'''
 '''battery commands'''
 
 import time, math
