@@ -249,10 +249,12 @@ class AUVModule(mp_module.MPModule):
         end_time = start_time + travel_time + latency
         '''Measure the run times and order of how this code segment runs'''
         while not self.surface() and self.bearing_check(bearing):
-            if time.clock() < end_time:
+            if end_time - time.clock() >= 0:
                 if self.traverse() > threshold:
-                    end_time += self.dense_traverse()
-            else:
+                    #Subtract the distance covered by dense_traverse() from the end_time
+                    self.dense_traverse(,, '''Calculate distance based on ''', bearing, 1)
+                    end_time -= #distance covered dense_traverse()   
+                else:
                 #Once time is elapsed, surface and check GPS location
                 self.velocity = 0
                 return self.surface()
