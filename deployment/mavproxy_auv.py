@@ -95,7 +95,7 @@ class AUVModule(mp_module.MPModule):
         rt_corner = [lng2, lat1]
 
         #The list index in quandrant that is TRUE is the quadrant the next waypoint is in
-        quadrant = [lng2 > lng1 && lat2 > lat1, lng2 < lng1 && lat2 > lat1, lng2 < lng1 && lat2 < lat1, lng2 > lng1 && lat2 < lat1]
+        quadrant = [lng2 > lng1 and lat2 > lat1, lng2 < lng1 and lat2 > lat1, lng2 < lng1 and lat2 < lat1, lng2 > lng1 and lat2 < lat1]
 
         #Uncorrected heading calculated from atan2 which will be in first quadrant. Measured relative to East
         uncorrected_heading = math.degrees(math.atan2( self._haversine(rt_corner[0], rt_corner[1], lng2, lat2) / self._haversine(lng1, lat1, rt_corner[0], rt_corner[1]) )) #degrees
