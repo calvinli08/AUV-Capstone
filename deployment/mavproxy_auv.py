@@ -14,7 +14,7 @@ after completing the whole sparse traversal. POI will be visited in the order gi
 Waypoints will be fed into the AUV class upon __init__ from file where they're stored
 '''
 
-#TODO figue out how to spint popellers, get heading underwater, check logical flow, make sure there are no background processes obstructing this code, read mavutils, try to replace as many of these operations with mavutils
+#TODO figue out how to spin popellers, get heading underwater, check logical flow, make sure there are no background processes obstructing this code, read mavutils, try to replace as many of these operations with mavutils
 
 from pymavlink import mavutil as mav
 from collections import deque
@@ -58,6 +58,9 @@ class AUVModule(mp_module.MPModule):
             self.AUVModule_settings = mp_settings.MPSettings([ ('verbose', bool, True), ])
             self.add_command('auv', self.cmd_auv, "AUV module", ['status','set (LOGSETTING)', 'start', 'reboot'])
 
+            #set manual mode
+            mav.mavfile.set_mode_manual()
+
     #calculate the distance between two latlng points using the haversine formula
     #source: https://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
     def _haversine(self, lon1, lat1, lon2, lat2):
@@ -76,15 +79,30 @@ class AUVModule(mp_module.MPModule):
         r = 6371 # Radius of earth in kilometers. Use 3956 for miles
         return c * r * 1000
 
-    #calculate intended heading
+    #Calculate intended heading
+    #This is assuming that heading is measured relative to Magnetic North
     def _intended_heading(self, present_heading, lng1, lat1, lng2, lat2):
+        #determine quadrant of next waypoint
+        #calculate atan2
+        #rotate answer according to waypoints original quadrant
+
         #corner of the right triangle formed using location and the next waypoint as it's vertices
         rt_corner = [lng2, lat1]
-        #this is assuming that heading is measured relative to Magnetic North
-        if (lng2 < lng1):
-            return - (present_heading + (90 - math.degrees(math.atan( self._haversine(rt_corner[1], rt_corner[0], lng2, lat2) / self._haversine(lng1, lat1, rt_corner[0], rt_corner[1]) )))) #degrees
+
+        #The list index in quandrant that is TRUE is the quadrant the next waypoint is in
+        quadrant = [lng2 > lng1 && lat2 > lat1, lng2 < lng1 && lat2 > lat1, lng2 < lng1 && lat2 < lat1, lng2 > lng1 && lat2 < lat1]
+
+        #Uncorrected heading calculated from atan2 which will be in first quadrant. Measured relative to East
+        uncorrected_heading = math.degrees(math.atan2( self._haversine(rt_corner[0], rt_corner[1], lng2, lat2) / self._haversine(lng1, lat1, rt_corner[0], rt_corner[1]) )) #degrees
+
+        if quadrant[0]:
+            return 90 - uncorrected_heading
+        elif quadrant[1]:
+            return (90 - uncorrected_heading) + (2 * uncorrected_heading + 180)
+        elif quadrant[2]:
+            return 90 - uncorrected_heading + 180
         else:
-            return (present_heading + (90 - math.degrees(math.atan( self._haversine(rt_corner[1], rt_corner[0], lng2, lat2) / self._haversine(rt_corner[1], rt_corner[0], lng1, lat1) )))) #degrees
+            return (90 - uncorrected_heading) + (2 * uncorrected_heading)
 
     def usage(self):
         '''show help on command line options'''
@@ -237,9 +255,9 @@ class AUVModule(mp_module.MPModule):
         if math.abs(offset) > 5:
             #Correct the error
             if offset > 0:
-                mav.#change yaw cw
-            else:
                 mav.#change yaw ccw
+            else:
+                mav.#change yaw cw
         else:
             return
 
@@ -251,6 +269,7 @@ class AUVModule(mp_module.MPModule):
 
     #traverse
     def traverse(self, time):
+        while mav.mavfile.motors_armed():
         mav.#move forward at 1 m/s
         mav.#spin thrusters in opposite direction of current
         return self.sample()
