@@ -60,6 +60,11 @@ class AUVModule(mp_module.MPModule):
 
             #set manual mode
             mav.mavfile.set_mode_manual()
+            #check if motors are armed
+            mav.mavfile.motors_armed_wait()
+            #set the apm mav_type
+            mav.mavfile.mode_mapping()
+
 
     #calculate the distance between two latlng points using the haversine formula
     #source: https://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
@@ -203,6 +208,8 @@ class AUVModule(mp_module.MPModule):
         distance = self._haversine(self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1])
         #Orient the vehicle in the correct cardinal direction
         self.heading_check(self.intended_heading)
+        #calibrate the pressure
+        mav.mavfile.calibrate_pressure()
 
         if self.battery >= 60.0 and qgc_checks:
             #Since there is enough battery, dive
@@ -223,7 +230,7 @@ class AUVModule(mp_module.MPModule):
     def dive(self, dive_point, destination, distance, depth = 1, heading, current = 1):
         #call the mavproxy command to spin motors down till the required depth
         for i in range(0, depth, 0.5):
-            mav.
+            mav.#down motors
         self.surfaced = False
         self.underwater_traverse(dive_point, destination, distance, heading, current)
 
@@ -270,8 +277,8 @@ class AUVModule(mp_module.MPModule):
     #traverse
     def traverse(self, time):
         while mav.mavfile.motors_armed():
-        mav.#move forward at 1 m/s
-        mav.#spin thrusters in opposite direction of current
+            mav.#move forward at 1 m/s
+            mav.#spin thrusters in opposite direction of current
         return self.sample()
 
     #underwater sparse traverse function
