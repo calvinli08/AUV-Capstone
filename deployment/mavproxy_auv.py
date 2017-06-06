@@ -24,46 +24,72 @@ from MAVProxy.modules import mavproxy_DGPS as dgps
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib.mp_settings import MPSetting
 from MAVProxy.modules import mavproxy_wp as wp
+from MAVProxy.modules import mavproxy_rc as rc
 
 class AUVModule(mp_module.MPModule):
     #__init__
     def __init__(self):
         super(AUVModules, self).__init__(mpstate, "AUV", "AUV sparse/dense traversal algorithm")
-        with open('/home/uav/dataflash/dataflash.txt',"r") as log:
-            self.battery = bm.BatteryModule.percentage()
-            #update using the dataflash logs
-            self.velocity = 0
-            self.time = time.clock()
-            self.surfaced = True
-            #GPS dependent values
-            self.location = mav.mavfile.location()
-            self.home = [self.location.lat, self.location.lng]
-            self.waypoints = deque(wp.WPModule.load_waypoints_dive('/home/pi/waypoints.txt'))
-            wp = self.waypoints.popleft().rsplit()
-            self.next_wp = [float(wp[3]), float(wp[2])] #lng,lat
-            self.heading = self.location.heading #degrees relative to Magnetic North
-            self.distance = self._haversine(self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1]) #meters
-            self.intended_heading = self._intended_heading( self.heading, self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1] )#degrees relative to Magnetic North
-            #need a current sensor for this. Let's try to find average current info online and hardcode it for now.
-            self.current = #m/s
-            #MAVProxy parameters
-            self.status_callcount = 0
-            self.boredom_interval = 1 # seconds
-            self.last_bored = time.clock()
+        self.battery = bm.BatteryModule.percentage()
+        #update using the dataflash logs
+        self.velocity = 0
+        self.time = time.clock()
+        self.surfaced = True
+        mav.mavfile.set_mode_apm(9)
+        #GPS dependent values
+        self.location = mav.mavfile.location()
+        self.home = [self.location.lat, self.location.lng]
+        self.waypoints = deque(wp.WPModule.load_waypoints_dive('/home/pi/waypoints.txt'))
+        wp = self.waypoints.popleft().rsplit()
+        self.next_wp = [float(wp[3]), float(wp[2])] #lng,lat
+        self.heading = self.location.heading #degrees relative to Magnetic North
+        self.distance = self._haversine(self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1]) #meters
+        self.intended_heading = self._intended_heading( self.heading, self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1] )#degrees relative to Magnetic North
+        #need a current sensor for this. Let's try to find average current info online and hardcode it for now.
+        self.current = 0 #m/s
+        #MAVProxy parameters
+        self.status_callcount = 0
+        self.boredom_interval = 1 # seconds
+        self.last_bored = time.clock()
 
-            self.packets_mytarget = 0
-            self.packets_othertarget = 0
-            self.verbose = True
+        self.packets_mytarget = 0
+        self.packets_othertarget = 0
+        self.verbose = True
 
-            self.AUVModule_settings = mp_settings.MPSettings([ ('verbose', bool, True), ])
-            self.add_command('auv', self.cmd_auv, "AUV module", ['status','set (LOGSETTING)', 'start', 'reboot'])
+        self.AUVModule_settings = mp_settings.MPSettings([ ('verbose', bool, True), ])
+        self.add_command('auv', self.cmd_auv, "AUV module", ['status','set (LOGSETTING)', 'start', 'reboot'])
 
-            #set manual mode
-            mav.mavfile.set_mode_manual()
-            #check if motors are armed
-            mav.mavfile.motors_armed_wait()
-            #set the apm mav_type
-            mav.mavfile.mode_mapping()
+        #set manual mode
+        mav.mavfile.set_mode_manual()
+        rc.RCModule.set_mode_manual
+        #wait for motors to be armed
+        mav.mavfile.motors_armed_wait()
+        #set the apm mav_type
+        mav.mavfile.mode_mapping()
+'''
+mode_mapping_sub = {
+    0: 'STABILIZE',
+    1: 'ACRO',
+    2: 'ALT_HOLD',
+    3: 'AUTO',
+    4: 'GUIDED',
+    5: 'VELHOLD',
+    6: 'RTL',
+    7: 'CIRCLE',
+    9: 'SURFACE',
+    10: 'OF_LOITER',
+    11: 'DRIFT',
+    13: 'TRANSECT',
+    14: 'FLIP',
+    15: 'AUTOTUNE',
+    16: 'POSHOLD',
+    17: 'BRAKE',
+    18: 'THROW',
+    19: 'MANUAL',
+    }
+
+'''
+
 
 
     #calculate the distance between two latlng points using the haversine formula
@@ -156,12 +182,11 @@ class AUVModule(mp_module.MPModule):
 
     #updates all the navigational parameters. Essentially __init__.
     def update(self):
-        with open('''path to log''',"r") as log:
-            self.battery = bm.BatteryModule.percentage()
-            self.heading =
-            self.velocity = log.readline()
-            self.time = time.clock()
-            self.current =
+        self.battery = bm.BatteryModule.percentage()
+        self.heading =
+        self.velocity = log.readline()
+        self.time = time.clock()
+        self.current = 1
 
     #Update the AUV's current GPS location, and get the cardinal direction of the next waypoint, and distance to it.
     def gps_update(self, next_wp):
@@ -181,7 +206,7 @@ class AUVModule(mp_module.MPModule):
             self.update()
             self.gps_update(self.home)
             self.heading_check(self.intended_heading)
-            mav.#spin forward propellers
+            rc.RCModule.set_override([0 0 0 0 0 0 0 0 0])#spin forward propellers
 
     #Performs pre-dive information gathering and checks
     def predive(self):
@@ -230,7 +255,8 @@ class AUVModule(mp_module.MPModule):
     def dive(self, dive_point, destination, distance, depth = 1, heading, current = 1):
         #call the mavproxy command to spin motors down till the required depth
         for i in range(0, depth, 0.5):
-            mav.#down motors
+            rc.RCModule.cmd_rc([5, 1800])#down motors
+            rc.RCModule.cmd)rc([6, 1200])
         self.surfaced = False
         self.underwater_traverse(dive_point, destination, distance, heading, current)
 
@@ -247,7 +273,8 @@ class AUVModule(mp_module.MPModule):
         '''
         self.update()
         if self.battery <= 35.0 or self.time >= 180 or self.velocity < 0.5:
-            mav.#surface command, spin vertical motors
+            mav.mavfile.set_servo(channel, 1700)#surface command, spin vertical motors
+            mav.mavfile.set_mode_apm(9)#set mode to surfaced
             self.surfaced = True
             self.predive()
             return True
@@ -262,9 +289,9 @@ class AUVModule(mp_module.MPModule):
         if math.abs(offset) > 5:
             #Correct the error
             if offset > 0:
-                mav.#change yaw ccw
+                mav.mavfile.set_servo(channel, 1700)#change yaw ccw
             else:
-                mav.#change yaw cw
+                mav.mavfile.set_servo(channel, 1300)#change yaw cw
         else:
             return
 
@@ -277,8 +304,13 @@ class AUVModule(mp_module.MPModule):
     #traverse
     def traverse(self, time):
         while mav.mavfile.motors_armed():
-            mav.#move forward at 1 m/s
-            mav.#spin thrusters in opposite direction of current
+            #Is this how it's done? Pixhawk docs say to not power servo directly, so this may be dangerous
+            #perhaps i am supposed to use another functions for motors? or power esc?
+            #if use servos: find map of servos and motors, also figure out how much pwm to send
+            #http://docs.bluerobotics.com/thrusters/t200/#performance-charts PWM VS THRUST CHART
+            #let's try 1800Hz@12V as default forward / 1200Hz@12V as default reverse and adjust from there
+            mav.mavfile.set_servo(channel,1800)#move forward at 1 m/s
+            mav.mavfile.set_servo(channel depends on current, 1800)#spin thrusters in opposite direction of current
         return self.sample()
 
     #underwater sparse traverse function
