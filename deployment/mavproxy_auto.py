@@ -11,6 +11,7 @@ from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
 from MAVProxy.modules import mavproxy_rc as rc
+from MAVProxy.modules import mavproxy_devop as dp
 from MAVProxy.modules.mavproxy_auto import mp_waypoint
 
 class AUVModule(mp_module.MPModule):
@@ -66,20 +67,23 @@ class AUVModule(mp_module.MPModule):
         self.wp_manager.cmd_wp(args)
 
     def cmd_underwater(self):
-        mav.set_mode_manual()
-        radctrl.set_mode_manual()
-        mav.motors_armed_wait()
-        #set the apm mav_type
-        mav.mode_mapping()
+        for waypoint in wherever_waypoints are:
+            mav.set_mode_manual()
+            radctrl.set_mode_manual()
+            mav.motors_armed_wait()
+            #set the apm mav_type
+            mav.mode_mapping()
 
-        if self.predive_check() is not True:
-            return "Insufficient Battery"
+            if self.predive_check() is not True:
+                return "Insufficient Battery"
 
-        self.orient_heading
+            self.orient_heading(self.intended_heading)
 
-        #dive
-        #traverse
+            self.dive([self.lng, self.lat], waypoint, distance, depth = 1, self.intended_heading current = 1)
 
+            self.underwater_traverse([self.lng, self.lat], waypoint, distance, heading)
+
+            self.surface()
 
     def idle_task(self):
         '''handle missing waypoints'''
@@ -148,9 +152,9 @@ class AUVModule(mp_module.MPModule):
 
     #Sample pollution with the sensors
     def sample(self):
-
-        return pollution
-
+        sensor_data = dp.devop_read()
+        self.pollution.append(sensor_data)
+        return sensor_data
     #traverse
     def traverse_and_sample(self, time = 1):
         while mav.motors_armed():
@@ -160,10 +164,7 @@ class AUVModule(mp_module.MPModule):
 
     #underwater sparse traverse function
     def underwater_traverse(self, start, end, distance, heading, current = 1):
-        travel_time = distance
-        start_time = time.clock()
-        latency =
-        end_time = start_time + travel_time + latency
+        end_time = time.clock() + distance + 10 #seconds
         '''Measure the run times and order of how this code segment runs'''
         while end_time - time.clock() >= 0:
                 if self.traverse_and_sample() > threshold:
@@ -203,14 +204,6 @@ class AUVModule(mp_module.MPModule):
         self.traverse_and_sample()
         self.orient_heading(self.direction_flip(previous_direction))
         self.traverse_and_sample(distance/2)
-
-
-
-
-
-
-
-        return time.clock() - start_time
 
     def direction_flip(self, direction):
         return direction += 180
