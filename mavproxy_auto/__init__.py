@@ -11,6 +11,7 @@ from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
 from MAVProxy.modules.mavproxy_auv import mp_waypoint
+from MAVProxy.modules.mavproxy_auv import mp_rc
 
 class AUVModule(mp_module.MPModule):
     def __init__(self, mpstate):
@@ -28,7 +29,9 @@ class AUVModule(mp_module.MPModule):
 
         self.pressure_sensor = [0] * 3
 
+        self.motor_event_complete = None
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
+        self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
 
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater'])
 
@@ -65,6 +68,104 @@ class AUVModule(mp_module.MPModule):
     def cmd_underwater(self):
         return "Not yet implemented"    
 
+    class motor_event(object):
+    '''a class for fixed frequency events'''
+        def __init__(self, seconds):
+            self.seconds = seconds
+            self.curr_time = time.time()
+            self.final_time = curr_time + seconds
+
+        def force(self):
+            '''force immediate triggering'''
+            self.curr_time = 0
+        
+        def trigger(self):
+            '''return True if we should trigger now'''
+            tnow = time.time()
+
+            if tnow < self.curr_time:
+                print("Warning, time moved backwards. Restarting timer.")
+                tnow = self.curr_time
+
+            if tnow >= self.final_time:
+                self.last_time = tnow
+                return True
+            return False
+
+    def wait_motor(self, seconds):
+        self.motor_event_complete = motor_event(seconds)
+    
+    def stop_motor(self):
+        override_stop = [1500] * 16
+        chan8 = self.override_stop[:8]
+        self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
+    
+    def yaxis_motor(self, speed, seconds):
+        '''control the bottom 4 motors fwd/rev'''
+        offset = speed - 1500
+        cw_speed = 1500 - offset
+        args = ["1",str(speed)]
+        self.rc_manager(args)
+        args = ["2",str(speed)]
+        self.rc_manager(args)
+        args = ["3",str(speed)]
+        self.rc_manager(args)
+        args = ["4",str(speed)]
+        self.rc_manager(args)
+
+        self.wait_motor(seconds)
+
+    def xaxis_motor(self, speed, seconds):
+        '''control the bottom 4 motors left/right'''
+        offset = speed - 1500
+        cw_speed = 1500 - offset
+        args = ["1",str(speed)]
+        self.rc_manager(args)
+        args = ["2",str(cw_speed)]
+        self.rc_manager(args)
+        args = ["3",str(cw_speed)]
+        self.rc_manager(args)
+        args = ["4",str(speed)]
+        self.rc_manager(args)
+
+        self.wait_motor(seconds)
+
+    def zaxis_motor(self, speed, seconds):
+        '''control the bottom 4 motors left/right'''
+        offset = speed - 1500
+        cw_speed = 1500 - offset
+        args = ["5",str(speed)]
+        self.rc_manager(args)
+        args = ["6",str(cw_speed)]
+        
+        self.wait_motor(seconds)
+
+    def roll_motor(self, speed, seconds):
+        '''control the bottom 4 motors left/right'''
+      
+        args = ["5",str(speed)]
+        self.rc_manager(args)
+        args = ["6",str(speed)]
+        
+        self.wait_motor(seconds)
+
+    def yaw_motor(self, speed, seconds):
+        '''control the bottom 4 motors left/right'''
+      
+        offset = speed - 1500
+        cw_speed = 1500 - offset
+        args = ["1",str(speed)]
+        self.rc_manager(args)
+        args = ["2",str(cw_speed)]
+        self.rc_manager(args)
+        args = ["3",str(speed)]
+        self.rc_manager(args)
+        args = ["4",str(cw_speed)]
+        self.rc_manager(args)
+
+        self.wait_motor(seconds)
+
+
     def idle_task(self):
         '''handle missing waypoints'''
         if self.wp_manager.wp_period.trigger():
@@ -73,6 +174,17 @@ class AUVModule(mp_module.MPModule):
                 wps = self.wp_manager.missing_wps_to_request();
                 print("re-requesting WPs %s" % str(wps))
                 self.wp_manager.send_wp_requests(wps)
+        if self.rc_manager.override_period.trigger():
+            if (self.rc_manager.override != [ 0 ] * 16 or
+                self.rc_manager.override != self.rc_manager.last_override or
+                self.rc_manager.override_counter > 0):
+                self.rc_manager.last_override = self.rc_manager.override[:]
+                self.rc_manager.send_rc_override()
+                if self.rc_manager.override_counter > 0:
+                    self.rc_manager.override_counter -= 1
+        if self.motor_event_complete:
+            if(self.motor_event_complete.trigger()):
+                self.stop_motor()
        
     def sensor_update(self, SCALED_PRESSURE2):
         '''update pressure sensor readings'''
