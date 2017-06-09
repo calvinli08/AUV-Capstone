@@ -16,12 +16,12 @@ Waypoints will be fed into the AUV class upon __init__ from file where they're s
 
 #TODO figue out how to spin popellers, get heading underwater, check logical flow, make sure there are no background processes obstructing this code, read mavutils, try to replace as many of these operations with mavutils
 
-from pymavlink import mavutil as mav
+from pymavlink import mavutil
 from collections import deque
 import os, time, math
 from MAVProxy.modules import mavproxy_battery as bm
 from MAVProxy.modules import mavproxy_DGPS as dgps
-from MAVProxy.modules.lib import mp_module
+from MAVProxy.modules.lib import mp_module, mp_util
 from MAVProxy.modules.lib.mp_settings import MPSetting
 from MAVProxy.modules import mavproxy_wp as wp
 from MAVProxy.modules import mavproxy_rc as rc
@@ -30,21 +30,25 @@ class AUVModule(mp_module.MPModule):
     #__init__
     def __init__(self):
         super(AUVModules, self).__init__(mpstate, "AUV", "AUV sparse/dense traversal algorithm")
-        self.battery = bm.BatteryModule.percentage()
+        radctrl = rc()
+        wypt = wp()
+        batm = bm()
+        mav = mavutil.mavfile()
+        self.battery = batm.percentage()
         #update using the dataflash logs
         self.velocity = 0
         self.time = time.clock()
         self.surfaced = True
-        mav.mavfile.set_mode_apm(9)
+        mav.set_mode_apm(9)
         #GPS dependent values
-        self.location = mav.mavfile.location()
-        self.home = [self.location.lat, self.location.lng]
-        self.waypoints = deque(wp.WPModule.load_waypoints_dive('/home/pi/waypoints.txt'))
+        self.location = mav.location()
+        self.home = [self.location.lng, self.location.lat]
+        self.waypoints = deque(wypt.load_waypoints_dive('/home/pi/waypoints.txt'))
         wp = self.waypoints.popleft().rsplit()
         self.next_wp = [float(wp[3]), float(wp[2])] #lng,lat
         self.heading = self.location.heading #degrees relative to Magnetic North
-        self.distance = self._haversine(self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1]) #meters
-        self.intended_heading = self._intended_heading( self.heading, self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1] )#degrees relative to Magnetic North
+        self.distance = mp_util.gps_distance(self.location.lat, self.location.lng, self.next_wp[1], self.next_wp[0]) #meters
+        self.intended_heading = self.gps_bearing(self.location.lat, self.location.lng, self.next_wp[1], self.next_wp[0] )#degrees relative to present heading
         #need a current sensor for this. Let's try to find average current info online and hardcode it for now.
         self.current = 0 #m/s
         #MAVProxy parameters
@@ -60,12 +64,12 @@ class AUVModule(mp_module.MPModule):
         self.add_command('auv', self.cmd_auv, "AUV module", ['status','set (LOGSETTING)', 'start', 'reboot'])
 
         #set manual mode
-        mav.mavfile.set_mode_manual()
-        rc.RCModule.set_mode_manual
+        mav.set_mode_manual()
+        radctrl.set_mode_manual()
         #wait for motors to be armed
-        mav.mavfile.motors_armed_wait()
+        mav.motors_armed_wait()
         #set the apm mav_type
-        mav.mavfile.mode_mapping()
+        mav.mode_mapping()
 '''
 mode_mapping_sub = {
     0: 'STABILIZE',
@@ -90,51 +94,6 @@ mode_mapping_sub = {
 
 '''
 
-
-
-    #calculate the distance between two latlng points using the haversine formula
-    #source: https://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
-    def _haversine(self, lon1, lat1, lon2, lat2):
-        """
-        Calculate the great circle distance between two points
-        on the earth (specified in decimal degrees)
-        """
-        # convert decimal degrees to radians
-        lon1, lat1, lon2, lat2 = map(math.radians(), [lon1, lat1, lon2, lat2])
-
-        # haversine formula
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-        c = 2 * math.asin(math.sqrt(a))
-        r = 6371 # Radius of earth in kilometers. Use 3956 for miles
-        return c * r * 1000
-
-    #Calculate intended heading
-    #This is assuming that heading is measured relative to Magnetic North
-    def _intended_heading(self, present_heading, lng1, lat1, lng2, lat2):
-        #determine quadrant of next waypoint
-        #calculate atan2
-        #rotate answer according to waypoints original quadrant
-
-        #corner of the right triangle formed using location and the next waypoint as it's vertices
-        rt_corner = [lng2, lat1]
-
-        #The list index in quandrant that is TRUE is the quadrant the next waypoint is in
-        quadrant = [lng2 > lng1 and lat2 > lat1, lng2 < lng1 and lat2 > lat1, lng2 < lng1 and lat2 < lat1, lng2 > lng1 and lat2 < lat1]
-
-        #Uncorrected heading calculated from atan2 which will be in first quadrant. Measured relative to East
-        uncorrected_heading = math.degrees(math.atan2( self._haversine(rt_corner[0], rt_corner[1], lng2, lat2) / self._haversine(lng1, lat1, rt_corner[0], rt_corner[1]) )) #degrees
-
-        if quadrant[0]:
-            return 90 - uncorrected_heading
-        elif quadrant[1]:
-            return (90 - uncorrected_heading) + (2 * uncorrected_heading + 180)
-        elif quadrant[2]:
-            return 90 - uncorrected_heading + 180
-        else:
-            return (90 - uncorrected_heading) + (2 * uncorrected_heading)
-
     def usage(self):
         '''show help on command line options'''
         return "Usage: auv <status|set|start|reboot>"
@@ -150,7 +109,7 @@ mode_mapping_sub = {
         elif args[0] == "start":
             self.predive()
         elif args[0] == "reboot":
-            mav.mavfile.reboot_autopilot()
+            mav.reboot_autopilot()
         else:
             print self.usage()
 
@@ -182,9 +141,9 @@ mode_mapping_sub = {
 
     #updates all the navigational parameters. Essentially __init__.
     def update(self):
-        self.battery = bm.BatteryModule.percentage()
+        self.battery = batm.percentage()
         self.heading =
-        self.velocity = log.readline()
+        self.velocity =
         self.time = time.clock()
         self.current = 1
 
@@ -192,73 +151,54 @@ mode_mapping_sub = {
     def gps_update(self, next_wp):
         #No point in checking it underwater where there is no GPS fix. That might also feed corrupted data to the module, so avoid calling this underwater.
         if self.surfaced == True:
-            self.location = mav.mavfile.location()
-            self.distance = self._haversine(self.location.lng, self.location.lat, next_wp[0], next_wp[1])
+            self.location = mav.location()
+            self.distance = mp_util.gps_distance(self.location.lat, self.location.lng, next_wp[1], next_wp[0])
             self.heading = self.location.heading
-            self.intended_heading = self._intended_heading(self.heading, self.location.lng, self.location.lat, next_wp[0], next_wp[1])
+            self.intended_heading = self.gps_bearing(self.location.lat, self.location.lng, next_wp[1], next_wp[0])
         else:
             return
 
     #Maneuvers the AUV while on the surface back towards the home point for maintenance, etc
-    def home(self):
+    def go_home(self):
         #Traverse to home waypoint
         while self.location != self.home:
             self.update()
             self.gps_update(self.home)
-            self.heading_check(self.intended_heading)
-            rc.RCModule.set_override([0 0 0 0 0 0 0 0 0])#spin forward propellers
+            self.orient_heading(self.intended_heading)
+            radctrl.set_override([0 0 0 0 0 0 0 0 0])#spin forward propellers
 
-    #Performs pre-dive information gathering and checks
-    def predive(self):
+    #get the next waypoint
+    def get_next_wp(self):
         #Get the current GPS coordinate
         self.gps_update(self.next_wp)
 
         #Set the next waypoint if the last waypoint was reached
         #If no more waypoints, go home
         if not self.waypoints:
-           self.home()
+           return False
         elif self.location == self.next_wp:
            self.next_wp = self.waypoints.popleft()
+           return True
+        return True
 
-        #Detect the river's present current
-        #Is there a module for this?
-        #Check if stats are fit for diving i.e. is there enough battery, mission area, etc
-        self.gps_update(self.next_wp)
-        self.update()
-
-        #Perform arm_throttle checks and any QGroundControl checks.
-        qgc_checks = #boolean
-
-        #Calculate distance between dive_point and next_wp
-        distance = self._haversine(self.location.lng, self.location.lat, self.next_wp[0], self.next_wp[1])
-        #Orient the vehicle in the correct cardinal direction
-        self.heading_check(self.intended_heading)
+    #Performs pre-dive information gathering and checks
+    def predive_check(self):
         #calibrate the pressure
-        mav.mavfile.calibrate_pressure()
-
-        if self.battery >= 60.0 and qgc_checks:
-            #Since there is enough battery, dive
-            self.dive(self.location, self.next_wp, distance, 1, self.intended_heading, 1)
+        mav.calibrate_pressure()
+        if self.battery >= 60.0:
             return True
-        elif 35.0 <= self.battery < 60.0 and qgc_checks and (self.battery*time_multiplier - (distance / self.velocity)) > 2:
-            #If the distance is within coverable distance, dive
-            #Units for above boolean condition is seconds
-            #Dive
-            self.dive(self.location, self.next_wp, distance, 1, self.intended_heading, 1)
+        elif 35.0 <= self.battery < 60.0 and (self.battery*time_multiplier - (distance / self.velocity)) > 2:
             return True
         else:
-            #Return to the home point
-            self.home()
             return False
 
     #Dives to a set depth, turns on the lights, and travels at a constant velocity to target
     def dive(self, dive_point, destination, distance, depth = 1, heading, current = 1):
         #call the mavproxy command to spin motors down till the required depth
         for i in range(0, depth, 0.5):
-            rc.RCModule.cmd_rc([5, 1800])#down motors
-            rc.RCModule.cmd)rc([6, 1200])
+            radctrl.cmd_rc([5, 1800])#down motors
+            radctrl.cmd_rc[6, 1200])
         self.surfaced = False
-        self.underwater_traverse(dive_point, destination, distance, heading, current)
 
     #Determines whether to surface
     def surface(self):
@@ -273,27 +213,23 @@ mode_mapping_sub = {
         '''
         self.update()
         if self.battery <= 35.0 or self.time >= 180 or self.velocity < 0.5:
-            mav.mavfile.set_servo(channel, 1700)#surface command, spin vertical motors
-            mav.mavfile.set_mode_apm(9)#set mode to surfaced
-            self.surfaced = True
-            self.predive()
-            return True
-        else:
-            return False
+        mav.set_servo(channel, 1700)#surface command, spin vertical motors
+        mav.set_mode_apm(9)#set mode to surfaced
+        self.surfaced = True
+        return
 
     #Check that the AUV is facing the correct cardinal direction and correct it if necessary
-    def heading_check(self, intended_heading):
+    def orient_heading(self, intended_heading):
         self.update()
-        #Calculate offset from intended heading
-        offset = self.heading - intended_heading
-        if math.abs(offset) > 5:
+        while intended_heading > 5:
             #Correct the error
-            if offset > 0:
-                mav.mavfile.set_servo(channel, 1700)#change yaw ccw
+            if intended_heading > 0:
+                radctrl.set_override([1800 0 0 1800 0 0 0 0])#change yaw ccw
             else:
-                mav.mavfile.set_servo(channel, 1300)#change yaw cw
+                radctrl.set_override([0 1800 1800 0 0 0 0 0])#change yaw cw
         else:
-            return
+            #once correction is complete, stop motors
+            radctrl.set_override([0 0 0 0 0 0 0 0])
 
     #Sample pollution with the sensors
     def sample(self):
@@ -302,15 +238,15 @@ mode_mapping_sub = {
         return #pollution level as a float
 
     #traverse
-    def traverse(self, time):
-        while mav.mavfile.motors_armed():
+    def traverse_and_sample(self, time):
+        while mav.motors_armed():
             #Is this how it's done? Pixhawk docs say to not power servo directly, so this may be dangerous
             #perhaps i am supposed to use another functions for motors? or power esc?
             #if use servos: find map of servos and motors, also figure out how much pwm to send
             #http://docs.bluerobotics.com/thrusters/t200/#performance-charts PWM VS THRUST CHART
             #let's try 1800Hz@12V as default forward / 1200Hz@12V as default reverse and adjust from there
-            mav.mavfile.set_servo(channel,1800)#move forward at 1 m/s
-            mav.mavfile.set_servo(channel depends on current, 1800)#spin thrusters in opposite direction of current
+            mav.set_servo(channel,1800)#move forward at 1 m/s
+            mav.set_servo(channel depends on current, 1800)#spin thrusters in opposite direction of current
         return self.sample()
 
     #underwater sparse traverse function
@@ -326,15 +262,15 @@ mode_mapping_sub = {
         latency =
         end_time = start_time + travel_time + latency
         '''Measure the run times and order of how this code segment runs'''
-        while self.surface() is False and self.heading_check(heading):
+        while self.surface() is False and self.orient_heading(heading):
             if end_time - time.clock() >= 0:
                 if self.traverse() > threshold:
                     remaining_distance = end_time - self.dense_traverse(,, '''Calculate distance based on ''', heading, 1)
                     end_time = time.clock() + remaining_distance
                 else:
-                #Once time is elapsed, surface and check GPS location
+                #Once time is elapsed, stop
                 self.velocity = 0
-                return self.surface()
+                return
 
     #dense traverse function that is called when pollution is above a threshold
     def dense_traverse(self, start, end, distance, heading, current = 1):
@@ -350,16 +286,24 @@ mode_mapping_sub = {
         right_direction = heading#rotate 90 deg cw
 
         #Orient vehicle in leftwards orthogonal cardinal direction
-        self.heading_check(left_direction)
+        self.orient_heading(left_direction)
         for i in range(distance/2):
             self.traverse(time)
 
 
         return time.clock() - start_time
 
+    def run_mission(self):
+        self.get_next_wp()
+        self.update()
+        self.gps_update(self.next_wp)
+        if self.predive():
+            self.dive(self.location, self.next_wp, distance, depth = 1, self.intended_heading, current = 1)
+
+
+
     #handle a mavlink packet
     def mavlink_packet(self, m):
-
 
 def init(mpstate):
     return AUVModule(mpstate)
