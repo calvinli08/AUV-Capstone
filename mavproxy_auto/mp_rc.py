@@ -3,13 +3,13 @@ from pymavlink import mavutil
 from MAVProxy.modules.lib import mp_module
 
 class RCManager():
-    def __init__(self, master, target_system, self.target_component):
+    def __init__(self, master, target_system, target_component):
         #super(RCModule, self).__init__(mpstate, "rc", "rc command handling", public = True)
         self.override = [ 0 ] * 16
         self.last_override = [ 0 ] * 16
         self.override_counter = 0
-        self.add_command('rc', self.cmd_rc, "RC input control", ['<1|2|3|4|5|6|7|8|all>'])
-        self.add_command('switch', self.cmd_switch, "flight mode switch control", ['<0|1|2|3|4|5|6>'])
+       # self.add_command('rc', self.cmd_rc, "RC input control", ['<1|2|3|4|5|6|7|8|all>'])
+       # self.add_command('switch', self.cmd_switch, "flight mode switch control", ['<0|1|2|3|4|5|6>'])
         self.override_period = mavutil.periodic_event(1)
         self.master = master
         self.target_system = target_system
@@ -86,4 +86,3 @@ class RCManager():
                 return
             channels[channel - 1] = value
         self.set_override(channels)
-
