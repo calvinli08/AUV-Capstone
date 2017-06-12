@@ -10,8 +10,9 @@ import time
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
-from MAVProxy.modules.mavproxy_auv import mp_waypoint
-from MAVProxy.modules.mavproxy_auv import mp_rc
+from MAVProxy.modules.mavproxy_auto import mp_waypoint
+from MAVProxy.modules.mavproxy_auto import mp_rc
+from MAVProxy.modules.mavproxy_auto import mp_fence
 
 class AUVModule(mp_module.MPModule):
     def __init__(self, mpstate):
@@ -27,18 +28,22 @@ class AUVModule(mp_module.MPModule):
         self.vz = 0
         self.hdg = 0
 
+        self.battery_level = -1
+        self.voltage_level = -1
+        self.current_battery = -1
+
         self.pressure_sensor = [0] * 3
 
         self.motor_event_complete = None
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
-
+        self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater'])
 
 
     def usage(self):
         '''show help on command line options'''
-        return "Usage: auto <surface|underwater>"
+        return "Usage: auto <setfence|surface|underwater>"
 
     def cmd_auto(self, args):
         '''control behaviour of the module'''
@@ -49,6 +54,8 @@ class AUVModule(mp_module.MPModule):
             self.cmd_surface()
         elif args[0] == "underwater":
             print self.cmd_underwater()
+        elif args[0] == "setfence":
+            print self.cmd_geofence(args[1:])
         else:
             print self.usage()
 
@@ -68,8 +75,14 @@ class AUVModule(mp_module.MPModule):
     def cmd_underwater(self):
         return "Not yet implemented"
 
+    def cmd_geofence(self, args):
+        return "Not yet implemented"
+
+    def load_geofence_points(self, filename)
+        self.fence_manager.cmd_fence(['load',filename])
+
     class motor_event(object):
-    '''a class for fixed frequency events'''
+        '''a class for fixed frequency events'''
         def __init__(self, seconds):
             self.seconds = seconds
             self.curr_time = time.time()
@@ -104,14 +117,17 @@ class AUVModule(mp_module.MPModule):
         '''control the bottom 4 motors fwd/rev'''
         offset = speed - 1500
         cw_speed = 1500 - offset
-        args = ["1",str(speed)]
-        self.rc_manager(args)
-        args = ["2",str(speed)]
-        self.rc_manager(args)
-        args = ["3",str(speed)]
-        self.rc_manager(args)
-        args = ["4",str(speed)]
-        self.rc_manager(args)
+        
+        self.rc_manager.set_override([speed,speed,speed,speed, 1500, 1500, 0, 0])
+
+        #args = ["1",str(speed)]
+        #self.rc_manager(args)
+        #args = ["2",str(speed)]
+        #self.rc_manager(args)
+        #args = ["3",str(speed)]
+        #self.rc_manager(args)
+        #args = ["4",str(speed)]
+        #self.rc_manager(args)
 
         self.wait_motor(seconds)
 
@@ -119,14 +135,17 @@ class AUVModule(mp_module.MPModule):
         '''control the bottom 4 motors left/right'''
         offset = speed - 1500
         cw_speed = 1500 - offset
-        args = ["1",str(speed)]
-        self.rc_manager(args)
-        args = ["2",str(cw_speed)]
-        self.rc_manager(args)
-        args = ["3",str(cw_speed)]
-        self.rc_manager(args)
-        args = ["4",str(speed)]
-        self.rc_manager(args)
+        
+        self.rc_manager.set_override([speed,cw_speed,cw_speed,speed, 1500, 1500, 0, 0])
+
+        #args = ["1",str(speed)]
+        #self.rc_manager(args)
+        #args = ["2",str(cw_speed)]
+        #self.rc_manager(args)
+        #args = ["3",str(cw_speed)]
+        #self.rc_manager(args)
+        #args = ["4",str(speed)]
+        #self.rc_manager(args)
 
         self.wait_motor(seconds)
 
@@ -134,18 +153,21 @@ class AUVModule(mp_module.MPModule):
         '''control the bottom 4 motors left/right'''
         offset = speed - 1500
         cw_speed = 1500 - offset
-        args = ["5",str(speed)]
-        self.rc_manager(args)
-        args = ["6",str(cw_speed)]
+        
+        self.rc_manager.set_override([1500,1500,1500,1500,speed,cw_speed,0,0])
+
+        #args = ["5",str(speed)]
+        #self.rc_manager(args)
+        #args = ["6",str(cw_speed)]
         
         self.wait_motor(seconds)
 
     def roll_motor(self, speed, seconds):
         '''control the bottom 4 motors left/right'''
-      
-        args = ["5",str(speed)]
-        self.rc_manager(args)
-        args = ["6",str(speed)]
+        self.rc_manager.set_override([1500,1500,1500,1500,speed,speed,0,0])
+        #args = ["5",str(speed)]
+        #self.rc_manager(args)
+        #args = ["6",str(speed)]
         
         self.wait_motor(seconds)
 
@@ -154,14 +176,15 @@ class AUVModule(mp_module.MPModule):
       
         offset = speed - 1500
         cw_speed = 1500 - offset
-        args = ["1",str(speed)]
-        self.rc_manager(args)
-        args = ["2",str(cw_speed)]
-        self.rc_manager(args)
-        args = ["3",str(speed)]
-        self.rc_manager(args)
-        args = ["4",str(cw_speed)]
-        self.rc_manager(args)
+        self.rc_manager.set_override([speed,cw_speed,speed,cw_speed, 1500, 1500, 0, 0])
+        #args = ["1",str(speed)]
+        #self.rc_manager(args)
+        #args = ["2",str(cw_speed)]
+        #self.rc_manager(args)
+        #args = ["3",str(speed)]
+        #self.rc_manager(args)
+        #args = ["4",str(cw_speed)]
+        #self.rc_manager(args)
 
         self.wait_motor(seconds)
 
@@ -174,9 +197,6 @@ class AUVModule(mp_module.MPModule):
                 wps = self.wp_manager.missing_wps_to_request();
                 print("re-requesting WPs %s" % str(wps))
                 self.wp_manager.send_wp_requests(wps)
-<<<<<<< HEAD
-
-=======
         if self.rc_manager.override_period.trigger():
             if (self.rc_manager.override != [ 0 ] * 16 or
                 self.rc_manager.override != self.rc_manager.last_override or
@@ -189,7 +209,6 @@ class AUVModule(mp_module.MPModule):
             if(self.motor_event_complete.trigger()):
                 self.stop_motor()
        
->>>>>>> 61e7a7be82299d54d03da3a6d2ca6881873a4bf7
     def sensor_update(self, SCALED_PRESSURE2):
         '''update pressure sensor readings'''
         self.pressure_sensor[0] = SCALED_PRESSURE2.press_abs
@@ -206,6 +225,14 @@ class AUVModule(mp_module.MPModule):
         self.vy = GLOBAL_POSITION_INT.vy
         self.vz = GLOBAL_POSITION_INT.vz
         self.hdg = GLOBAL_POSITION_INT.hdg
+    
+    def battery_update(self, SYS_STATUS):
+        '''update battery level'''
+        # main flight battery
+        self.battery_level = SYS_STATUS.battery_remaining
+        self.voltage_level = SYS_STATUS.voltage_battery
+        self.current_battery = SYS_STATUS.current_battery
+        
 
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
@@ -218,6 +245,9 @@ class AUVModule(mp_module.MPModule):
 
         elif mtype == 'SCALED_PRESSURE2':
              self.sensor_update(m)
+
+        elif mtype == "SYS_STATUS":
+            self.battery_update(m)
 
         elif mtype in ['WAYPOINT_COUNT','MISSION_COUNT']:
             self.wp_manager.wploader.expected_count = m.count
@@ -284,41 +314,39 @@ class AUVModule(mp_module.MPModule):
                     if alt_offset > 0.005:
                         self.wp_manager.say("ALT OFFSET IS NOT ZERO passing DO_LAND_START")
 
-        '''Fence packets'''
-
-        if m.get_type() == "FENCE_STATUS":
-            self.last_fence_breach = m.breach_time
-            self.last_fence_status = m.breach_status
+        elif m.get_type() == "FENCE_STATUS":
+            self.fence_manager.last_fence_breach = m.breach_time
+            self.fence_manager.last_fence_status = m.breach_status
         elif m.get_type() in ['SYS_STATUS']:
             bits = mavutil.mavlink.MAV_SYS_STATUS_GEOFENCE
 
             present = ((m.onboard_control_sensors_present & bits) == bits)
-            if self.present == False and present == True:
+            if self.fence_manager.present == False and present == True:
                 self.say("fence present")
-            elif self.present == True and present == False:
+            elif self.fence_manager.present == True and present == False:
                 self.say("fence removed")
             self.present = present
 
             enabled = ((m.onboard_control_sensors_enabled & bits) == bits)
-            if self.enabled == False and enabled == True:
+            if self.fence_manager.enabled == False and enabled == True:
                 self.say("fence enabled")
-            elif self.enabled == True and enabled == False:
+            elif self.fence_manager.enabled == True and enabled == False:
                 self.say("fence disabled")
-            self.enabled = enabled
+            self.fence_manager.enabled = enabled
 
             healthy = ((m.onboard_control_sensors_health & bits) == bits)
-            if self.healthy == False and healthy == True:
+            if self.fence_manager.healthy == False and healthy == True:
                 self.say("fence OK")
-            elif self.healthy == True and healthy == False:
+            elif self.fence_manager.healthy == True and healthy == False:
                 self.say("fence breach")
-            self.healthy = healthy
+            self.fence_manager.healthy = healthy
 
             #console output for fence:
-            if self.enabled == False:
-                self.console.set_status('Fence', 'FEN', row=0, fg='grey')
-            elif self.enabled == True and self.healthy == True:
+            if self.fence_manager.enabled == False:
+                self.fence_manager.console.set_status('Fence', 'FEN', row=0, fg='grey')
+            elif self.fence_manager.enabled == True and self.fence_manager.healthy == True:
                 self.console.set_status('Fence', 'FEN', row=0, fg='green')
-            elif self.enabled == True and self.healthy == False:
+            elif self.fence_manager.enabled == True and self.fence_manager.healthy == False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
 
 
