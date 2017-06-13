@@ -113,7 +113,7 @@ class AUVModule(mp_module.MPModule):
         '''strafe right for 3 seconds'''
         self.yaxis_motor(1400,3)
 
-     '''unit test delete later '''
+    '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
         '''roll cw  for 3 seconds'''
