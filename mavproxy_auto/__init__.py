@@ -194,83 +194,41 @@ class AUVModule(mp_module.MPModule):
         self.motor_event_complete = self.motor_event(seconds)
     
     def stop_motor(self):
-        override_stop = [1500] * 16
-        chan8 = override_stop[:8]
+   
+        chan8 = [1500,1500,1500,1500,1500,1500,1100,1500]
         self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
     
     def yaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors fwd/rev'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-        
-        self.rc_manager.set_override([speed,speed,speed,speed, 1500, 1500, 0, 0])
-
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(speed)]
-        #self.rc_manager(args)
+        args = ["5" , str(speed)]
+        self.rc_manager.cmd_rc(args)
 
         self.wait_motor(seconds)
 
     def xaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors left/right'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-        
-        self.rc_manager.set_override([speed,cw_speed,cw_speed,speed, 1500, 1500, 0, 0])
-
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(speed)]
-        #self.rc_manager(args)
+        args = ["6" , str(speed)]
+        self.rc_manager.cmd_rc(args)
+       
 
         self.wait_motor(seconds)
 
     def zaxis_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-        
-        self.rc_manager.set_override([1500,1500,1500,1500,speed,cw_speed,0,0])
-
-        #args = ["5",str(speed)]
-        #self.rc_manager(args)
-        #args = ["6",str(cw_speed)]
+        args = ["3" , str(speed)]
+        self.rc_manager.cmd_rc(args)
         
         self.wait_motor(seconds)
 
     def roll_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
-        self.rc_manager.set_override([1500,1500,1500,1500,speed,speed,0,0])
-        #args = ["5",str(speed)]
-        #self.rc_manager(args)
-        #args = ["6",str(speed)]
+        args = ["2" , str(speed)]
+        self.rc_manager.cmd_rc(args)
         
         self.wait_motor(seconds)
 
     def yaw_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
+        args = ["4" , str(speed)]
+        self.rc_manager.cmd_rc(args)
       
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-        self.rc_manager.set_override([speed,cw_speed,speed,cw_speed, 1500, 1500, 0, 0])
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(cw_speed)]
-        #self.rc_manager(args)
-
         self.wait_motor(seconds)
 
 
