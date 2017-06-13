@@ -171,7 +171,7 @@ class AUVModule(mp_module.MPModule):
         def __init__(self, seconds):
             self.seconds = seconds
             self.curr_time = time.time()
-            self.final_time = curr_time + seconds
+            self.final_time = self.curr_time + seconds
 
         def force(self):
             '''force immediate triggering'''
