@@ -191,7 +191,7 @@ class AUVModule(mp_module.MPModule):
             return False
 
     def wait_motor(self, seconds):
-        self.motor_event_complete = motor_event(seconds)
+        self.motor_event_complete = self.motor_event(seconds)
     
     def stop_motor(self):
         override_stop = [1500] * 16
