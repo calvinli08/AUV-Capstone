@@ -100,7 +100,7 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test1(self):
         '''xmotor test'''
-         '''move foward for 3 seconds'''
+        '''move foward for 3 seconds'''
         self.xaxis_motor(1600,3)
         '''move backward for 3 seconds'''
         self.xaxis_motor(1400,3)
@@ -108,7 +108,7 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test2(self):
         '''ymotor test'''
-         '''strafe left for 3 seconds'''
+        '''strafe left for 3 seconds'''
         self.yaxis_motor(1600,3)
         '''strafe right for 3 seconds'''
         self.yaxis_motor(1400,3)
@@ -116,7 +116,7 @@ class AUVModule(mp_module.MPModule):
      '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
-         '''roll cw  for 3 seconds'''
+        '''roll cw  for 3 seconds'''
         self.roll_motor(1600,3)
         '''roll ccw for 3 seconds'''
         self.roll_motor(1400,3)
@@ -124,7 +124,7 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test4(self):
         '''yaw motor test'''
-         '''turn left  for 3 seconds'''
+        '''turn left  for 3 seconds'''
         self.yaw_motor(1600,3)
         '''turn right for 3 seconds'''
         self.yaw_motor(1400,3)
@@ -132,7 +132,7 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test5(self):
         '''z motor test'''
-         '''dive for 3 seconds'''
+        '''dive for 3 seconds'''
         self.zaxis_motor(1400,3)
         '''surface for 3 seconds'''
         self.zaxis_motor(1600,3)
@@ -163,7 +163,7 @@ class AUVModule(mp_module.MPModule):
     def cmd_geofence(self, args):
         return "Not yet implemented"
 
-    def load_geofence_points(self, filename)
+    def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load',filename])
 
     class motor_event(object):
@@ -195,7 +195,7 @@ class AUVModule(mp_module.MPModule):
     
     def stop_motor(self):
         override_stop = [1500] * 16
-        chan8 = self.override_stop[:8]
+        chan8 = override_stop[:8]
         self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
     
     def yaxis_motor(self, speed, seconds):
