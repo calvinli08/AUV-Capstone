@@ -98,7 +98,7 @@ class AUVModule(mp_module.MPModule):
             self.test7()
 
     '''unit test delete later '''
-    def test1():
+    def test1(self):
         '''xmotor test'''
          '''move foward for 3 seconds'''
         self.xaxis_motor(1600,3)
@@ -106,7 +106,7 @@ class AUVModule(mp_module.MPModule):
         self.xaxis_motor(1400,3)
 
     '''unit test delete later '''
-    def test2():
+    def test2(self):
         '''ymotor test'''
          '''strafe left for 3 seconds'''
         self.yaxis_motor(1600,3)
@@ -114,7 +114,7 @@ class AUVModule(mp_module.MPModule):
         self.yaxis_motor(1400,3)
 
      '''unit test delete later '''
-    def test3():
+    def test3(self):
         '''roll motor test'''
          '''roll cw  for 3 seconds'''
         self.roll_motor(1600,3)
@@ -122,7 +122,7 @@ class AUVModule(mp_module.MPModule):
         self.roll_motor(1400,3)
 
     '''unit test delete later '''
-    def test4():
+    def test4(self):
         '''yaw motor test'''
          '''turn left  for 3 seconds'''
         self.yaw_motor(1600,3)
@@ -130,7 +130,7 @@ class AUVModule(mp_module.MPModule):
         self.yaw_motor(1400,3)
 
     '''unit test delete later '''
-    def test5():
+    def test5(self):
         '''z motor test'''
          '''dive for 3 seconds'''
         self.zaxis_motor(1400,3)
@@ -138,12 +138,12 @@ class AUVModule(mp_module.MPModule):
         self.zaxis_motor(1600,3)
 
     '''unit test delete later '''
-    def test6():
+    def test6(self):
         '''sensor polling'''
         self.enable_temp_poll = True
 
     '''unit test delete later '''
-    def test7():
+    def test7(self):
         '''waypoint testing'''
 
         self.enable_temp_poll = True
