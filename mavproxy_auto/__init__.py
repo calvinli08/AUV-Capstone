@@ -91,7 +91,7 @@ class AUVModule(mp_module.MPModule):
         def force(self):
             '''force immediate triggering'''
             self.curr_time = 0
-        
+
         def trigger(self):
             '''return True if we should trigger now'''
             tnow = time.time()
@@ -107,17 +107,17 @@ class AUVModule(mp_module.MPModule):
 
     def wait_motor(self, seconds):
         self.motor_event_complete = motor_event(seconds)
-    
+
     def stop_motor(self):
         override_stop = [1500] * 16
         chan8 = self.override_stop[:8]
         self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
-    
+
     def yaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors fwd/rev'''
         offset = speed - 1500
         cw_speed = 1500 - offset
-        
+
         self.rc_manager.set_override([speed,speed,speed,speed, 1500, 1500, 0, 0])
 
         #args = ["1",str(speed)]
@@ -135,7 +135,7 @@ class AUVModule(mp_module.MPModule):
         '''control the bottom 4 motors left/right'''
         offset = speed - 1500
         cw_speed = 1500 - offset
-        
+
         self.rc_manager.set_override([speed,cw_speed,cw_speed,speed, 1500, 1500, 0, 0])
 
         #args = ["1",str(speed)]
@@ -153,13 +153,13 @@ class AUVModule(mp_module.MPModule):
         '''control the bottom 4 motors left/right'''
         offset = speed - 1500
         cw_speed = 1500 - offset
-        
+
         self.rc_manager.set_override([1500,1500,1500,1500,speed,cw_speed,0,0])
 
         #args = ["5",str(speed)]
         #self.rc_manager(args)
         #args = ["6",str(cw_speed)]
-        
+
         self.wait_motor(seconds)
 
     def roll_motor(self, speed, seconds):
@@ -168,12 +168,12 @@ class AUVModule(mp_module.MPModule):
         #args = ["5",str(speed)]
         #self.rc_manager(args)
         #args = ["6",str(speed)]
-        
+
         self.wait_motor(seconds)
 
     def yaw_motor(self, speed, seconds):
         '''control the bottom 4 motors left/right'''
-      
+
         offset = speed - 1500
         cw_speed = 1500 - offset
         self.rc_manager.set_override([speed,cw_speed,speed,cw_speed, 1500, 1500, 0, 0])
@@ -208,7 +208,7 @@ class AUVModule(mp_module.MPModule):
         if self.motor_event_complete:
             if(self.motor_event_complete.trigger()):
                 self.stop_motor()
-       
+
     def sensor_update(self, SCALED_PRESSURE2):
         '''update pressure sensor readings'''
         self.pressure_sensor[0] = SCALED_PRESSURE2.press_abs
@@ -225,14 +225,14 @@ class AUVModule(mp_module.MPModule):
         self.vy = GLOBAL_POSITION_INT.vy
         self.vz = GLOBAL_POSITION_INT.vz
         self.hdg = GLOBAL_POSITION_INT.hdg
-    
+
     def battery_update(self, SYS_STATUS):
         '''update battery level'''
         # main flight battery
         self.battery_level = SYS_STATUS.battery_remaining
         self.voltage_level = SYS_STATUS.voltage_battery
         self.current_battery = SYS_STATUS.current_battery
-        
+
 
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
