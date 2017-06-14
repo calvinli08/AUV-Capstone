@@ -36,6 +36,7 @@ class AUVModule(mp_module.MPModule):
         self.depth_sensor = [0] * 3
 
         self.motor_event_complete = None
+        self.motor_event_enabled = False
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
@@ -101,41 +102,41 @@ class AUVModule(mp_module.MPModule):
     def test1(self):
         '''xmotor test'''
         '''move foward for 3 seconds'''
-        self.xaxis_motor(1600,3)
+        self.xaxis_motor(1510,1)
         '''move backward for 3 seconds'''
-        self.xaxis_motor(1400,3)
+        self.xaxis_motor(1490,1)
 
     '''unit test delete later '''
     def test2(self):
         '''ymotor test'''
         '''strafe left for 3 seconds'''
-        self.yaxis_motor(1600,3)
+        self.yaxis_motor(1510,1)
         '''strafe right for 3 seconds'''
-        self.yaxis_motor(1400,3)
+        self.yaxis_motor(1490,1)
 
     '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
         '''roll cw  for 3 seconds'''
-        self.roll_motor(1600,3)
+        self.roll_motor(1510,1)
         '''roll ccw for 3 seconds'''
-        self.roll_motor(1400,3)
+        self.roll_motor(1490,1)
 
     '''unit test delete later '''
     def test4(self):
         '''yaw motor test'''
         '''turn left  for 3 seconds'''
-        self.yaw_motor(1600,3)
+        self.yaw_motor(1510,1)
         '''turn right for 3 seconds'''
-        self.yaw_motor(1400,3)
+        self.yaw_motor(1490,1)
 
     '''unit test delete later '''
     def test5(self):
         '''z motor test'''
         '''dive for 3 seconds'''
-        self.zaxis_motor(1400,3)
+        self.zaxis_motor(1490,1)
         '''surface for 3 seconds'''
-        self.zaxis_motor(1600,3)
+        self.zaxis_motor(1510,1)
 
     '''unit test delete later '''
     def test6(self):
@@ -191,6 +192,7 @@ class AUVModule(mp_module.MPModule):
             return False
 
     def wait_motor(self, seconds):
+        self.motor_event_enabled = True
         self.motor_event_complete = self.motor_event(seconds)
     
     def stop_motor(self):
@@ -250,10 +252,10 @@ class AUVModule(mp_module.MPModule):
                 self.rc_manager.send_rc_override()
                 if self.rc_manager.override_counter > 0:
                     self.rc_manager.override_counter -= 1
-        if self.motor_event_complete:
+        if self.motor_event_enabled:
             if(self.motor_event_complete.trigger()):
                 self.stop_motor()
-                self.motor_event_complete = None
+                self.motor_event_enabled = False
         if self.enable_temp_poll:
             now = time.time()
             if(now - self.last_poll > self.poll_interval):
