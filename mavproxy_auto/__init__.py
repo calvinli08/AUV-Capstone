@@ -36,6 +36,7 @@ class AUVModule(mp_module.MPModule):
         self.depth_sensor = [0] * 3
 
         self.motor_event_complete = None
+        self.motor_event_enabled = False
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
@@ -101,41 +102,41 @@ class AUVModule(mp_module.MPModule):
     def test1(self):
         '''xmotor test'''
         '''move foward for 3 seconds'''
-        self.xaxis_motor(1600,3)
+        self.xaxis_motor(1510,1)
         '''move backward for 3 seconds'''
-        self.xaxis_motor(1400,3)
+        self.xaxis_motor(1490,1)
 
     '''unit test delete later '''
     def test2(self):
         '''ymotor test'''
         '''strafe left for 3 seconds'''
-        self.yaxis_motor(1600,3)
+        self.yaxis_motor(1510,1)
         '''strafe right for 3 seconds'''
-        self.yaxis_motor(1400,3)
+        self.yaxis_motor(1490,1)
 
-     '''unit test delete later '''
+    '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
         '''roll cw  for 3 seconds'''
-        self.roll_motor(1600,3)
+        self.roll_motor(1510,1)
         '''roll ccw for 3 seconds'''
-        self.roll_motor(1400,3)
+        self.roll_motor(1490,1)
 
     '''unit test delete later '''
     def test4(self):
         '''yaw motor test'''
         '''turn left  for 3 seconds'''
-        self.yaw_motor(1600,3)
+        self.yaw_motor(1510,1)
         '''turn right for 3 seconds'''
-        self.yaw_motor(1400,3)
+        self.yaw_motor(1490,1)
 
     '''unit test delete later '''
     def test5(self):
         '''z motor test'''
         '''dive for 3 seconds'''
-        self.zaxis_motor(1400,3)
+        self.zaxis_motor(1490,1)
         '''surface for 3 seconds'''
-        self.zaxis_motor(1600,3)
+        self.zaxis_motor(1510,1)
 
     '''unit test delete later '''
     def test6(self):
@@ -191,6 +192,7 @@ class motor_event(object):
         return False
 
     def wait_motor(self, seconds):
+<<<<<<< HEAD
         self.motor_event_complete = motor_event(seconds)
 
     def stop_motor(self):
@@ -213,11 +215,28 @@ class motor_event(object):
         #self.rc_manager(args)
         #args = ["4",str(speed)]
         #self.rc_manager(args)
+=======
+        self.motor_event_enabled = True
+        self.motor_event_complete = self.motor_event(seconds)
+    
+    def stop_motor(self):
+   
+        args = ["all", "1500"]
+        self.rc_manager.cmd_rc(args)
+        #chan8 = [1500,1500,1500,1500,1500,1500,1100,1500]
+        #self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
+    
+    def yaxis_motor(self, speed, seconds):
+        '''control the bottom 4 motors fwd/rev'''
+        args = ["5" , str(speed)]
+        self.rc_manager.cmd_rc(args)
+>>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
 
         self.wait_motor(seconds)
 
     def xaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors left/right'''
+<<<<<<< HEAD
         offset = speed - 1500
         cw_speed = 1500 - offset
 
@@ -231,10 +250,16 @@ class motor_event(object):
         #self.rc_manager(args)
         #args = ["4",str(speed)]
         #self.rc_manager(args)
+=======
+        args = ["6" , str(speed)]
+        self.rc_manager.cmd_rc(args)
+       
+>>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
 
         self.wait_motor(seconds)
 
     def zaxis_motor(self, speed, seconds):
+<<<<<<< HEAD
         '''control the bottom 4 motors left/right'''
         offset = speed - 1500
         cw_speed = 1500 - offset
@@ -271,6 +296,23 @@ class motor_event(object):
         #args = ["4",str(cw_speed)]
         #self.rc_manager(args)
 
+=======
+        args = ["3" , str(speed)]
+        self.rc_manager.cmd_rc(args)
+        
+        self.wait_motor(seconds)
+
+    def roll_motor(self, speed, seconds):
+        args = ["2" , str(speed)]
+        self.rc_manager.cmd_rc(args)
+        
+        self.wait_motor(seconds)
+
+    def yaw_motor(self, speed, seconds):
+        args = ["4" , str(speed)]
+        self.rc_manager.cmd_rc(args)
+      
+>>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
         self.wait_motor(seconds)
 
 
@@ -290,12 +332,16 @@ class motor_event(object):
                 self.rc_manager.send_rc_override()
                 if self.rc_manager.override_counter > 0:
                     self.rc_manager.override_counter -= 1
-        if self.motor_event_complete:
+        if self.motor_event_enabled:
             if(self.motor_event_complete.trigger()):
                 self.stop_motor()
+<<<<<<< HEAD
 
     def sensor_update(self, SCALED_PRESSURE2):
         self.motor_event_complete = None
+=======
+                self.motor_event_enabled = False
+>>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
         if self.enable_temp_poll:
             now = time.time()
             if(now - self.last_poll > self.poll_interval):
