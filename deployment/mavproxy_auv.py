@@ -70,8 +70,8 @@ class AUVModule(mp_module.MPModule):
         mav.motors_armed_wait()
         #set the apm mav_type
         mav.mode_mapping()
-'''
-mode_mapping_sub = {
+    '''
+    mode_mapping_sub = {
     0: 'STABILIZE',
     1: 'ACRO',
     2: 'ALT_HOLD',
@@ -92,7 +92,7 @@ mode_mapping_sub = {
     19: 'MANUAL',
     }
 
-'''
+    '''
 
     def usage(self):
         '''show help on command line options'''

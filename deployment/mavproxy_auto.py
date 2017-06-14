@@ -3,7 +3,7 @@
 import os
 import os.path
 import sys
-from pymavlink import mavutil
+from pymavlink import mavutil, mavwp
 import errno
 import time
 import numpy as np
@@ -14,18 +14,21 @@ from MAVProxy.modules.lib import mp_settings
 from MAVProxy.modules import mavproxy_rc
 from MAVProxy.modules import mavproxy_devop
 from MAVProxy.modules import mavproxy_fence
-from MAVProxy.modules.mavproxy_auto import mp_waypoint
+from MAVProxy.modules import mavproxy_wp
+from MAVProxy.modules import mavproxy_rotors
 
-class AUVModule(mp_module.MPModule):
+class AutoModule(mp_module.MPModule):
     def __init__(self, mpstate):
         """Initialise module"""
-        super(AUVModule, self).__init__(mpstate, "auto", "Telemetry Data for autonomous navigation", public = True)
-        rc = mavproxy_rc()
-        fn = mavproxy_fence()
+        super(AutoModule, self).__init__(mpstate, "auto", "Telemetry Data for autonomous navigation", public = True)
+        rc = mavproxy_rc.RCModule()
+        fn = mavproxy_fence.FenceModule()
+        rt = mavproxy_rotors.RotorsModule()
         self.distance_to_waypoint = 0
         self.next_wp = [] #lat,lng
         self.intended_heading = 0
         self.pollution_array = None #initialize later
+        self.loops = 0
 
         self.lat = 0
         self.lon = 0
@@ -71,13 +74,24 @@ class AUVModule(mp_module.MPModule):
         else:
             print "geofence <load|reload>"
 
-    def load_geofence_points(self, filename = '/home/pi/fence.txt'):
+    def load_geofence_points(self, filename = '/home/pi/geofence.txt'):
         '''load fence points from file'''
         '''fence points are lat,lng coordinates'''
         fn.cmd_fence(['load', filename])
 
     def calculate_geofence_edge_lengths(self):
-
+        '''calculate length of geofence rectangle sides'''
+        f = open('fence.txt', "r")
+        points = []
+        p = []
+        for line in f:
+            p = f.readline().split()
+            points.append([p[0], p[1]])
+        distance_between_points = []
+        for x in range(len(points)-1):
+            distance_between_points.append(mp_util.gps_distance(points[x][0], points[x][1], points[x+1][0], points[x+1][1]))
+        width = min(distance_between_points)
+        length = max(distance_between_points)
 
     def cmd_auto(self, args):
         '''control behaviour of the module'''
@@ -121,14 +135,15 @@ class AUVModule(mp_module.MPModule):
 
         self.orient_heading(self.intended_heading)
 
-        self.pollution_array =
+        self.pollution_array = None
 
         #x = lat, y = lng
-        self.dive([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, depth = 1, self.intended_heading, current = 1)
+        self.dive([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, self.intended_heading, 1, 1)
 
         self.underwater_traverse([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, heading)
 
         self.surface()
+        return
 
     def idle_task(self):
         '''handle missing waypoints'''
@@ -168,17 +183,19 @@ class AUVModule(mp_module.MPModule):
             return False
 
     #Dives to a set depth
-    def dive(self, dive_point, destination, distance, depth = 1, heading, current = 1):
-        for i in xrange(0, depth, 0.5):
-            rc.set_override([0 0 0 0 1200 1800 0 0])
-        rc.set_override([0 0 0 0 0 0 0 0])
+    def dive(self, dive_point, destination, distance, heading, depth = 1, current = 1):
+        #while time.time() - start_time < 0.7:
+        rt.zaxis_motors(1800, 1.2)
+            #rc.set_override([0 0 0 0 1200 1800 0 0])
+        #rc.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
         self.surfaced = False
 
     #Surface
     def surface(self):
-        for i in xrange(0, depth, 0.5)
-            rc.set_override([0 0 0 0 1800 1200 0 0])
-        rc.set_override([0 0 0 0 0 0 0 0])
+       # for i in xrange(0, depth, 0.5)
+        #    rc.set_override([0 0 0 0 1800 1200 0 0])
+        #rc.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
+        rt.zaxis_motors(1200, 2)
         mav.set_mode_apm(9)#set mode to surfaced
         self.surfaced = True
         return
@@ -187,11 +204,14 @@ class AUVModule(mp_module.MPModule):
     def orient_heading(self, intended_heading):
         while intended_heading > 5:
             if intended_heading > 0:
-                rc.set_override([1800 0 0 1800 0 0 0 0])#change yaw ccw
+                #rc.set_override([1800 0 0 1800 0 0 0 0])#change yaw ccw
+                rt.yaw_motor(1300, 1)
             else:
-                rc.set_override([0 1800 1800 0 0 0 0 0])#change yaw cw
+                rt.yaw_motor(1800, 1)
+                #rc.set_override([0 1800 1800 0 0 0 0 0])#change yaw cw
         else:
-            rc.set_override([0 0 0 0 0 0 0 0])
+            #rc.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
+            rt.stop_motor()
 
     #Sample pollution with the sensors
     def sample(self):
@@ -201,11 +221,13 @@ class AUVModule(mp_module.MPModule):
 
     #traverse
     def traverse_and_sample(self, start_time, time = 1):
-        while mav.motors_armed() and time.time() - start_time < 1.2:
-            rc.set_override([1800 1800 1200 1200 0 0 0 0])#move forward at 1 m/s
-            rc.set_override([0 0 0 0 0 0 0 0])#spin thrusters in opposite direction of current
-        else:
-            rc.set_override([0 0 0 0 0 0 0 0])
+        #while mav.motors_armed() and time.time() - start_time < time:
+            #rc.set_override([1800 1800 1200 1200 0 0 0 0])#move forward at 1 m/s
+            #rc.set_override([1500 1500 1500 1500 1500 1500 1500 1500])#spin thrusters in opposite direction of current
+        rt.yaxis_motor(1800, time)
+        #else:
+        rt.stop_motor()
+            #rc.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
         return self.sample()
 
     #underwater sparse traverse function
@@ -216,36 +238,35 @@ class AUVModule(mp_module.MPModule):
         while end_time - int(time.time()) >= 0:
             if self.traverse_and_sample(time.time()) > threshold:
                 elapsed_time = (int(time.time()) - start_time) + start_time
-                remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, 5, heading, 1, end_time - int(time.time())) - elapsed_time
+                remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, end_time - int(time.time()), self.loops, heading, 5, 2, 1) - elapsed_time
                 end_time = int(time.time()) + remaining_distance + 10
         else:
             #Once time is elapsed, stop
-            rc.set_override([0 0 0 0 0 0 0 0])
+            #rc.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
+            rt.stop_motor()
+            if distance == 1:
+                self.loops += 1
             return
 
     #dense traverse function that is called when pollution is above a threshold
-    def dense_traverse(self, start, end, forward_travel_distance = 5, sideways_distance = 2, heading, current = 1, forward_distance_to_edge):
+    def dense_traverse(self, start, end, forward_distance_to_edge, loop_number, heading, forward_travel_distance = 5, sideways_distance = 2, current = 1):
         '''
         dense traverse makes more loops within a smaller area. It accomplishes this by traveling 1/5 the width of sparse traverse for it's width portion, and minute steps for it's length.
         '''
 
         if forward_distance_to_edge < forward_travel_distance:
             forward_travel_distance = forward_distance_to_edge - 2
-        elif distance to fence edge < sideways_distance:
-            self.fence_edge_dense_traverse(start, end, forward_distance, sideways_distance, heading, 1, remaining_distance)
-            return
+        elif loops < sideways_distance:
+            sideways_distance = sideways_distance/2
 
 
         start_time = int(time.time())
         left_direction = heading - 90
         right_direction = heading + 90
 
-        self.orient_heading(left_direction)
-        previous_direction = left_direction
-        self.traverse_and_sample(sideways_distance/2)
-
-        self.orient_heading(heading)
-        self.traverse_and_sample()
+        self.orient_heading(right_direction)
+        previous_direction = right_direction
+        self.traverse_and_sample(sideways_distance)
 
         for j in xrange(distance):
             self.orient_heading(heading)
@@ -262,13 +283,6 @@ class AUVModule(mp_module.MPModule):
         self.traverse_and_sample(sideways_distance/2)
 
         return forward_travel_distance
-
-    def fence_edge_dense_traverse(self, start, end, distance, heading, current = 1):
-        don't go if it's near fence edge
-
-        #if end_time - distance < start_time +
-        return
-
 
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
@@ -347,7 +361,7 @@ class AUVModule(mp_module.MPModule):
                 alt_offset = self.wp_manager.get_mav_param('ALT_OFFSET', 0)
                 if alt_offset > 0.005:
                     self.wp_manager.say("ALT OFFSET IS NOT ZERO passing DO_LAND_START")
-              else:
+            else:
                 self.next_wp = [wp.MAVLink_mission_item_message.x, wp.MAVLink_mission_item_message.y] #lat,lng
                 self.cmd_underwater(wp)
 
@@ -393,4 +407,4 @@ class AUVModule(mp_module.MPModule):
 
 def init(mpstate):
     '''initialise module'''
-    return AUVModule(mpstate)
+    return AutoModule(mpstate)

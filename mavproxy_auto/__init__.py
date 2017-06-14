@@ -33,13 +33,18 @@ class AUVModule(mp_module.MPModule):
         self.current_battery = -1
 
         self.pressure_sensor = [0] * 3
+        self.depth_sensor = [0] * 3
 
         self.motor_event_complete = None
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence','test (number)'])
 
+        '''Test variables'''
+        self.enable_temp_poll = False
+        self.last_poll = time.time()
+        self.poll_interval = 7 '''seconds'''
 
     def usage(self):
         '''show help on command line options'''
@@ -56,6 +61,8 @@ class AUVModule(mp_module.MPModule):
             print self.cmd_underwater()
         elif args[0] == "setfence":
             print self.cmd_geofence(args[1:])
+        elif args[0] == "test":
+            print self.cmd_unittest(args[1:])
         else:
             print self.usage()
 
@@ -72,45 +79,123 @@ class AUVModule(mp_module.MPModule):
         args = ["load" , "testfile.txt"]
         self.wp_manager.cmd_wp(args)
 
+    def cmd_unittest(self,args):
+        if len(args) == 0:
+            print self.usage()
+        elif args[0] == "1":
+            self.test1()
+        elif args[0] == "2":
+            self.test2()
+        elif args[0] == "3":
+            self.test3()
+        elif args[0] == "4":
+            self.test4()
+        elif args[0] == "5":
+            self.test5()
+        elif args[0] == "6":
+            self.test6()
+        elif args[0] == "7":
+            self.test7()
+
+    '''unit test delete later '''
+    def test1(self):
+        '''xmotor test'''
+        '''move foward for 3 seconds'''
+        self.xaxis_motor(1600,3)
+        '''move backward for 3 seconds'''
+        self.xaxis_motor(1400,3)
+
+    '''unit test delete later '''
+    def test2(self):
+        '''ymotor test'''
+        '''strafe left for 3 seconds'''
+        self.yaxis_motor(1600,3)
+        '''strafe right for 3 seconds'''
+        self.yaxis_motor(1400,3)
+
+     '''unit test delete later '''
+    def test3(self):
+        '''roll motor test'''
+        '''roll cw  for 3 seconds'''
+        self.roll_motor(1600,3)
+        '''roll ccw for 3 seconds'''
+        self.roll_motor(1400,3)
+
+    '''unit test delete later '''
+    def test4(self):
+        '''yaw motor test'''
+        '''turn left  for 3 seconds'''
+        self.yaw_motor(1600,3)
+        '''turn right for 3 seconds'''
+        self.yaw_motor(1400,3)
+
+    '''unit test delete later '''
+    def test5(self):
+        '''z motor test'''
+        '''dive for 3 seconds'''
+        self.zaxis_motor(1400,3)
+        '''surface for 3 seconds'''
+        self.zaxis_motor(1600,3)
+
+    '''unit test delete later '''
+    def test6(self):
+        '''sensor polling'''
+        self.enable_temp_poll = True
+
+    '''unit test delete later '''
+    def test7(self):
+        '''waypoint testing'''
+
+        self.enable_temp_poll = True
+        f = open('testfile.txt', 'w')
+        f.write('QGC WPL 110\n')
+        f.write('0  1   0   16  0.149999999999999994    0   0   0   40.5195286 -74.46088470000001 0 1\n')
+        f.write('1  0   0   16  0.149999999999999994    0   0   0   40.5195286 -74.46088470000001 0 1\n')
+        f.write('2  0   0   16  0.149999999999999994    0   0   0   40.5195286 -74.46088470000001 0 1\n')
+        f.close()
+
+        args = ["load" , "testfile.txt"]
+        self.wp_manager.cmd_wp(args)
+
     def cmd_underwater(self):
         return "Not yet implemented"
 
     def cmd_geofence(self, args):
         return "Not yet implemented"
 
-    def load_geofence_points(self, filename)
+    def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load',filename])
 
-    class motor_event(object):
-        '''a class for fixed frequency events'''
-        def __init__(self, seconds):
-            self.seconds = seconds
-            self.curr_time = time.time()
-            self.final_time = curr_time + seconds
+class motor_event(object):
+    '''a class for fixed frequency events'''
+    def __init__(self, seconds):
+        self.seconds = seconds
+        self.curr_time = time.time()
+        self.final_time = self.curr_time + seconds
 
-        def force(self):
-            '''force immediate triggering'''
-            self.curr_time = 0
+    def force(self):
+        '''force immediate triggering'''
+        self.curr_time = 0
 
-        def trigger(self):
-            '''return True if we should trigger now'''
-            tnow = time.time()
+    def trigger(self):
+        '''return True if we should trigger now'''
+        tnow = time.time()
 
-            if tnow < self.curr_time:
-                print("Warning, time moved backwards. Restarting timer.")
-                tnow = self.curr_time
+        if tnow < self.curr_time:
+            print("Warning, time moved backwards. Restarting timer.")
+            tnow = self.curr_time
 
-            if tnow >= self.final_time:
-                self.last_time = tnow
-                return True
-            return False
+        if tnow >= self.final_time:
+            self.last_time = tnow
+            return True
+        return False
 
     def wait_motor(self, seconds):
         self.motor_event_complete = motor_event(seconds)
 
     def stop_motor(self):
         override_stop = [1500] * 16
-        chan8 = self.override_stop[:8]
+        chan8 = override_stop[:8]
         self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
 
     def yaxis_motor(self, speed, seconds):
@@ -210,10 +295,26 @@ class AUVModule(mp_module.MPModule):
                 self.stop_motor()
 
     def sensor_update(self, SCALED_PRESSURE2):
+        self.motor_event_complete = None
+        if self.enable_temp_poll:
+            now = time.time()
+            if(now - self.last_poll > self.poll_interval):
+                self.last_poll = now
+                self.say("Depth sensor values: Press_abs: %f Press_diff: %f temperature: %d \n" % (self.depth_sensor[0],self.depth_sensor[1],self.depth_sensor[2]))
+                self.say("Pressure sensor values: Press_abs: %f Press_diff: %f temperature: %d \n" % (self.pressure_sensor[0],self.pressure_sensor[1],self.pressure_sensor[2]))
+
+
+    def psensor_update(self, SCALED_PRESSURE2):
         '''update pressure sensor readings'''
         self.pressure_sensor[0] = SCALED_PRESSURE2.press_abs
         self.pressure_sensor[1] = SCALED_PRESSURE2.press_diff
         self.pressure_sensor[2] = SCALED_PRESSURE2.temperature
+
+    def dsensor_update(self, SCALED_PRESSURE):
+        '''update depth sensor readings'''
+        self.depth_sensor[0] = SCALED_PRESSURE.press_abs
+        self.depth_sensor[1] = SCALED_PRESSURE.press_diff
+        self.depth_sensor[2] = SCALED_PRESSURE.temperature
 
     def gps_update(self, GLOBAL_POSITION_INT):
         '''update gps readings'''
@@ -244,7 +345,10 @@ class AUVModule(mp_module.MPModule):
                 self.gps_update(m)
 
         elif mtype == 'SCALED_PRESSURE2':
-             self.sensor_update(m)
+             self.psensor_update(m)
+
+        elif mtype == 'SCALED_PRESSURE':
+             self.dsensor_update(m)
 
         elif mtype == "SYS_STATUS":
             self.battery_update(m)

@@ -22,7 +22,7 @@ class WPManager():
         self.undo_wp = None
         self.undo_type = None
         self.undo_wp_idx = -1
-        
+
         self.master = master
         self.target_system = target_system
         self.target_component = target_component
@@ -167,7 +167,7 @@ class WPManager():
         if self.wploader.count() > 0:
             return self.wploader.wp(0)
         return None
-        
+
 
     def wp_draw_callback(self, points):
         '''callback from drawing waypoints'''
@@ -551,4 +551,3 @@ class WPManager():
         if self.wp_op is None:  # If we were already doing a list or save, just restart the fetch without changing the operation
             self.wp_op = "fetch"
         self.master.waypoint_request_list_send()
-
