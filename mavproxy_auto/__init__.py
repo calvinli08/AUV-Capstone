@@ -195,8 +195,10 @@ class AUVModule(mp_module.MPModule):
     
     def stop_motor(self):
    
-        chan8 = [1500,1500,1500,1500,1500,1500,1100,1500]
-        self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
+        args = ["all", "1500"]
+        self.rc_manager.cmd_rc(args)
+        #chan8 = [1500,1500,1500,1500,1500,1500,1100,1500]
+        #self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
     
     def yaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors fwd/rev'''
