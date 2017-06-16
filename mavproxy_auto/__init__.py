@@ -14,6 +14,7 @@ from MAVProxy.modules.mavproxy_auto import mp_waypoint
 from MAVProxy.modules.mavproxy_auto import mp_rc
 from MAVProxy.modules.mavproxy_auto import mp_fence
 
+
 class AUVModule(mp_module.MPModule):
     def __init__(self, mpstate):
         """Initialise module"""
@@ -389,7 +390,7 @@ class AUVModule(mp_module.MPModule):
         elif mtype == "SYS_STATUS":
             self.battery_update(m)
 
-       if mtype in ['WAYPOINT_COUNT','MISSION_COUNT']:
+        if mtype in ['WAYPOINT_COUNT','MISSION_COUNT']:
            if self.wp_op is None:
                self.console.error("No waypoint load started")
            else:
@@ -400,7 +401,7 @@ class AUVModule(mp_module.MPModule):
                                                                                 time.asctime()))
                self.send_wp_requests()
 
-       elif mtype in ['WAYPOINT', 'MISSION_ITEM'] and self.wp_op != None:
+        elif mtype in ['WAYPOINT', 'MISSION_ITEM'] and self.wp_op != None:
            if m.seq < self.wploader.count():
                #print("DUPLICATE %u" % m.seq)
                return
@@ -433,16 +434,16 @@ class AUVModule(mp_module.MPModule):
            self.wp_requested = {}
            self.wp_received = {}
 
-       elif mtype in ["WAYPOINT_REQUEST", "MISSION_REQUEST"]:
+        elif mtype in ["WAYPOINT_REQUEST", "MISSION_REQUEST"]:
            self.process_waypoint_request(m, self.master)
 
-       elif mtype in ["WAYPOINT_CURRENT", "MISSION_CURRENT"]:
+        elif mtype in ["WAYPOINT_CURRENT", "MISSION_CURRENT"]:
            if m.seq != self.last_waypoint:
                self.last_waypoint = m.seq
                if self.settings.wpupdates:
                    self.say("waypoint %u" % m.seq,priority='message')
 
-       elif mtype == "MISSION_ITEM_REACHED":
+        elif mtype == "MISSION_ITEM_REACHED":
            wp = self.wploader.wp(m.seq)
            if wp is None:
                # should we spit out a warning?!
@@ -510,11 +511,10 @@ class motor_event(object):
 
         if tnow >= self.final_time:
             self.last_time = tnow
-             True
-         False
-
+            return True
+        return False
 
 
 def init(mpstate):
     '''initialise module'''
-     AUVModule(mpstate)
+    return AUVModule(mpstate)
