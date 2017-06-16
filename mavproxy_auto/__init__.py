@@ -50,7 +50,7 @@ class AUVModule(mp_module.MPModule):
 
     def usage(self):
         '''show help on command line options'''
-         "Usage: auto <dense|setfence|surface|underwater>"
+        return "Usage: auto <dense|setfence|surface|underwater>"
 
     def cmd_auto(self, args):
         '''control behaviour of the module'''
@@ -162,10 +162,10 @@ class AUVModule(mp_module.MPModule):
         self.wp_manager.cmd_wp(args)
 
     def cmd_underwater(self):
-         "Not yet implemented"
+        return "Not yet implemented"
 
     def cmd_geofence(self, args):
-         "Not yet implemented"
+        return "Not yet implemented"
 
     def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load',filename])
@@ -389,70 +389,70 @@ class AUVModule(mp_module.MPModule):
         elif mtype == "SYS_STATUS":
             self.battery_update(m)
 
-        elif mtype in ['WAYPOINT_COUNT','MISSION_COUNT']:
-            self.wp_manager.wploader.expected_count = m.count
-            if self.wp_manager.wp_op is None:
-                self.wp_manager.console.error("No waypoint load started")
-            else:
-                self.wp_manager.wploader.clear()
-                self.wp_manager.console.writeln("Requesting %u waypoints t=%s now=%s" % (m.count,
-                                                                                 time.asctime(time.localtime(m._timestamp)),
-                                                                                 time.asctime()))
-                self.wp_manager.send_wp_requests()
+       if mtype in ['WAYPOINT_COUNT','MISSION_COUNT']:
+           if self.wp_op is None:
+               self.console.error("No waypoint load started")
+           else:
+               self.wploader.clear()
+               self.wploader.expected_count = m.count
+               self.console.writeln("Requesting %u waypoints t=%s now=%s" % (m.count,
+                                                                                time.asctime(time.localtime(m._timestamp)),
+                                                                                time.asctime()))
+               self.send_wp_requests()
 
-        elif mtype in ['WAYPOINT', 'MISSION_ITEM'] and self.wp_manager.wp_op != None:
-            if m.seq < self.wp_manager.wploader.count():
-                #print("DUPLICATE %u" % m.seq)
+       elif mtype in ['WAYPOINT', 'MISSION_ITEM'] and self.wp_op != None:
+           if m.seq < self.wploader.count():
+               #print("DUPLICATE %u" % m.seq)
+               return
+           if m.seq+1 > self.wploader.expected_count:
+               self.console.writeln("Unexpected waypoint number %u - expected %u" % (m.seq, self.wploader.count()))
+           self.wp_received[m.seq] = m
+           next_seq = self.wploader.count()
+           while next_seq in self.wp_received:
+               m = self.wp_received.pop(next_seq)
+               self.wploader.add(m)
+               next_seq += 1
+           if self.wploader.count() != self.wploader.expected_count:
+               #print("m.seq=%u expected_count=%u" % (m.seq, self.wploader.expected_count))
+               self.send_wp_requests()
+               return
+           if self.wp_op == 'list':
+               for i in range(self.wploader.count()):
+                   w = self.wploader.wp(i)
+                   print("%u %u %.10f %.10f %f p1=%.1f p2=%.1f p3=%.1f p4=%.1f cur=%u auto=%u" % (
+                       w.command, w.frame, w.x, w.y, w.z,
+                       w.param1, w.param2, w.param3, w.param4,
+                       w.current, w.autocontinue))
+               if self.logdir != None:
+                   waytxt = os.path.join(self.logdir, 'way.txt')
+                   self.save_waypoints(waytxt)
+                   print("Saved waypoints to %s" % waytxt)
+           elif self.wp_op == "save":
+               self.save_waypoints(self.wp_save_filename)
+           self.wp_op = None
+           self.wp_requested = {}
+           self.wp_received = {}
 
-            if m.seq+1 > self.wp_manager.wploader.expected_count:
-                self.wp_manager.console.writeln("Unexpected waypoint number %u - expected %u" % (m.seq, self.wp_manager.wploader.count()))
-            self.wp_manager.wp_received[m.seq] = m
-            next_seq = self.wp_manager.wploader.count()
-            while next_seq in self.wp_manager.wp_received:
-                m = self.wp_manager.wp_received.pop(next_seq)
-                self.wp_manager.wploader.add(m)
-                next_seq += 1
-            if self.wp_manager.wploader.count() != self.wp_manager.wploader.expected_count:
-                #print("m.seq=%u expected_count=%u" % (m.seq, self.wp_manager.wploader.expected_count))
-                self.wp_manager.send_wp_requests()
+       elif mtype in ["WAYPOINT_REQUEST", "MISSION_REQUEST"]:
+           self.process_waypoint_request(m, self.master)
 
-            if self.wp_manager.wp_op == 'list':
-                for i in range(self.wp_manager.wploader.count()):
-                    w = self.wp_manager.wploader.wp(i)
-                    print("%u %u %.10f %.10f %f p1=%.1f p2=%.1f p3=%.1f p4=%.1f cur=%u auto=%u" % (
-                        w.command, w.frame, w.x, w.y, w.z,
-                        w.param1, w.param2, w.param3, w.param4,
-                        w.current, w.autocontinue))
-                if self.wp_manager.logdir != None:
-                    waytxt = os.path.join(self.wp_manager.logdir, 'way.txt')
-                    self.wp_manager.save_waypoints(waytxt)
-                    print("Saved waypoints to %s" % waytxt)
-            elif self.wp_manager.wp_op == "save":
-                self.wp_manager.save_waypoints(self.wp_manager.wp_save_filename)
-            self.wp_manager.wp_op = None
-            self.wp_manager.wp_requested = {}
-            self.wp_manager.wp_received = {}
+       elif mtype in ["WAYPOINT_CURRENT", "MISSION_CURRENT"]:
+           if m.seq != self.last_waypoint:
+               self.last_waypoint = m.seq
+               if self.settings.wpupdates:
+                   self.say("waypoint %u" % m.seq,priority='message')
 
-        elif mtype in ["WAYPOINT_REQUEST", "MISSION_REQUEST"]:
-            self.wp_manager.process_waypoint_request(m, self.wp_manager.master)
-
-        elif mtype in ["WAYPOINT_CURRENT", "MISSION_CURRENT"]:
-            if m.seq != self.wp_manager.last_waypoint:
-                self.wp_manager.last_waypoint = m.seq
-                if self.wp_manager.settings.wpupdates:
-                    self.wp_manager.say("waypoint %u" % m.seq,priority='message')
-
-        elif mtype == "MISSION_ITEM_REACHED":
-            wp = self.wp_manager.wploader.wp(m.seq)
-            if wp is None:
-                # should we spit out a warning?!
-                # self.wp_manager.say("No waypoints")
-                pass
-            else:
-                if wp.command == mavutil.mavlink.MAV_CMD_DO_LAND_START:
-                    alt_offset = self.wp_manager.get_mav_param('ALT_OFFSET', 0)
-                    if alt_offset > 0.005:
-                        self.wp_manager.say("ALT OFFSET IS NOT ZERO passing DO_LAND_START")
+       elif mtype == "MISSION_ITEM_REACHED":
+           wp = self.wploader.wp(m.seq)
+           if wp is None:
+               # should we spit out a warning?!
+               # self.say("No waypoints")
+               pass
+           else:
+               if wp.command == mavutil.mavlink.MAV_CMD_DO_LAND_START:
+                   alt_offset = self.get_mav_param('ALT_OFFSET', 0)
+                   if alt_offset > 0.005:
+                       self.say("ALT OFFSET IS NOT ZERO passing DO_LAND_START")
 
         elif m.get_type() == "FENCE_STATUS":
             self.fence_manager.last_fence_breach = m.breach_time
