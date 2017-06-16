@@ -42,6 +42,7 @@ class AUVModule(mp_module.MPModule):
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence', 'dense'])
+        self.add_command('move', self.cmd_move, "Movement", ['<x|y|z|roll|yaw>', 'pwm', 'seconds'])
         self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
 
         '''Test variables'''
@@ -253,24 +254,24 @@ class AUVModule(mp_module.MPModule):
         if len(args) != 3:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
         elif args[0] == "x":
-            self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, args[1], 1500,])
-            self.wait_motor(args[2])
+            self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, int(args[1]), 1500,])
+            self.wait_motor(int(args[2]))
             return
         elif args[0] == "y":
-            self.rc_manager.set_override([1500, 1500, args[1], 1500, 1500, args[1], 1500, 1500,])
-            self.wait_motor(args[2])
+            self.rc_manager.set_override([1500, 1500, int(args[1]), 1500, 1500, int(args[1]), 1500, 1500,])
+            self.wait_motor(int(args[2]))
             return
         elif args[0] == "z":
             self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
-            self.wait_motor(args[2])
+            self.wait_motor(int(args[2]))
             return
         elif args[0] == "roll":
-            self.rc_manager.set_override([args[1], 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
-            self.wait_motor(args[2])
+            self.rc_manager.set_override([int(args[1]), 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
+            self.wait_motor(int(args[2]))
             return
         elif args[0] == "yaw":
-            self.rc_manager.set_override([1500, 1500, 1500, args[1], 1500, 1500, 1500, 1500,])
-            self.wait_motor(args[2])
+            self.rc_manager.set_override([1500, 1500, 1500, int(args[1]), 1500, 1500, 1500, 1500,])
+            self.wait_motor(int(args[2]))
             return
         else:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
