@@ -174,10 +174,10 @@ class AUVModule(mp_module.MPModule):
     def orient_heading(self, intended_heading):
         while intended_heading > 5:
             if intended_heading > 0:
-                self.cmd_move(['yaw' 1800 20])
+                self.cmd_move(['yaw', 1800, 20])
                 print "orienting!"
             else:
-                self.cmd_move(['yaw' 1200 20])
+                self.cmd_move(['yaw', 1200, 20])
                 print "otherwise!"
         else:
             print "done orienting!"
@@ -185,7 +185,7 @@ class AUVModule(mp_module.MPModule):
 
     #traverse
     def traverse_and_sample(self, start_time, time = 1):
-        self.cmd_move(['y' 1800 20])
+        self.cmd_move(['y', 1800, 20])
         print "traversing!"
         self.stop_motor()
         return self.sample()
@@ -252,23 +252,23 @@ class AUVModule(mp_module.MPModule):
         if len(args) != 3:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
         elif args[0] == "x":
-            self.rc_manager.set_override([1500 1500 1500 1500 1500 1500 args[1] 1500])
+            self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, args[1], 1500,])
             self.wait_motor(args[2])
             return
         elif args[0] == "y":
-            self.rc_manager.set_override([1500 1500 args[1] 1500 1500 args[1] 1500 1500])
+            self.rc_manager.set_override([1500, 1500, args[1], 1500, 1500, args[1], 1500, 1500,])
             self.wait_motor(args[2])
             return
         elif args[0] == "z":
-            self.rc_manager.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
+            self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
             self.wait_motor(args[2])
             return
         elif args[0] == "roll":
-            self.rc_manager.set_override([args[1] 1500 1500 1500 1500 1500 1500 1500])
+            self.rc_manager.set_override([args[1], 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
             self.wait_motor(args[2])
             return
         elif args[0] == "yaw":
-            self.rc_manager.set_override([1500 1500 1500 args[1] 1500 1500 1500 1500])
+            self.rc_manager.set_override([1500, 1500, 1500, args[1], 1500, 1500, 1500, 1500,])
             self.wait_motor(args[2])
             return
         else:
