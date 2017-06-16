@@ -40,16 +40,17 @@ class AUVModule(mp_module.MPModule):
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence','test (number)'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence', 'dense'])
+        self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
 
         '''Test variables'''
         self.enable_temp_poll = False
         self.last_poll = time.time()
-        self.poll_interval = 7 '''seconds'''
+        self.poll_interval = 7
 
     def usage(self):
         '''show help on command line options'''
-        return "Usage: auto <setfence|surface|underwater>"
+         "Usage: auto <dense|setfence|surface|underwater>"
 
     def cmd_auto(self, args):
         '''control behaviour of the module'''
@@ -64,6 +65,8 @@ class AUVModule(mp_module.MPModule):
             print self.cmd_geofence(args[1:])
         elif args[0] == "test":
             print self.cmd_unittest(args[1:])
+        elif args[0] == "dense":
+            self.dense_traverse()
         else:
             print self.usage()
 
@@ -130,7 +133,7 @@ class AUVModule(mp_module.MPModule):
         '''turn right for 3 seconds'''
         self.yaw_motor(1490,1)
 
-    '''unit test delete later '''
+    '''unit test delete later'''
     def test5(self):
         '''z motor test'''
         '''dive for 3 seconds'''
@@ -159,162 +162,153 @@ class AUVModule(mp_module.MPModule):
         self.wp_manager.cmd_wp(args)
 
     def cmd_underwater(self):
-        return "Not yet implemented"
+         "Not yet implemented"
 
     def cmd_geofence(self, args):
-        return "Not yet implemented"
+         "Not yet implemented"
 
     def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load',filename])
 
-class motor_event(object):
-    '''a class for fixed frequency events'''
-    def __init__(self, seconds):
-        self.seconds = seconds
-        self.curr_time = time.time()
-        self.final_time = self.curr_time + seconds
+    #Check that the AUV is facing the correct cardinal direction and correct it if necessary
+    def orient_heading(self, intended_heading):
+        while intended_heading > 5:
+            if intended_heading > 0:
+                self.cmd_move(['yaw' 1800 20])
+                print "orienting!"
+            else:
+                self.cmd_move(['yaw' 1200 20])
+                print "otherwise!"
+        else:
+            print "done orienting!"
+            self.stop_motor()
 
-    def force(self):
-        '''force immediate triggering'''
-        self.curr_time = 0
+    #traverse
+    def traverse_and_sample(self, start_time, time = 1):
+        self.cmd_move(['y' 1800 20])
+        print "traversing!"
+        self.stop_motor()
+        return self.sample()
 
-    def trigger(self):
-        '''return True if we should trigger now'''
-        tnow = time.time()
+    '''test with default values, delete later'''
+    #dense traverse function that is called when pollution is above a threshold
+    def dense_traverse(self, start, end, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
+        '''
+        dense traverse makes more loops within a smaller area. It accomplishes this by traveling 1/5 the width of sparse traverse for it's width portion, and minute steps for it's length.
+        '''
 
-        if tnow < self.curr_time:
-            print("Warning, time moved backwards. Restarting timer.")
-            tnow = self.curr_time
+        print "orangutan"
+        if forward_distance_to_edge < forward_travel_distance:
+            forward_travel_distance = forward_distance_to_edge - 2
+        elif loops < sideways_distance:
+            sideways_distance = sideways_distance/2
 
-        if tnow >= self.final_time:
-            self.last_time = tnow
-            return True
-        return False
+        print "pie"
+        start_time = int(time.time())
+        left_direction = heading - 90
+        right_direction = heading + 90
+
+        self.orient_heading(right_direction)
+        print "matilda"
+        previous_direction = right_direction
+        self.traverse_and_sample(sideways_distance)
+        print "mockingbird"
+
+        for j in xrange(distance):
+            self.orient_heading(heading)
+            self.traverse_and_sample()
+            print "blueberry jam"
+            previous_direction += 180
+            self.orient_heading(previous_direction)
+            self.traverse_and_sample(sideways_distance)
+
+        self.orient_heading(heading)
+        self.traverse_and_sample()
+        previous_direction += 180
+        self.orient_heading(previous_direction)
+        self.traverse_and_sample(sideways_distance/2)
+
+        return forward_travel_distance
 
     def wait_motor(self, seconds):
-<<<<<<< HEAD
-        self.motor_event_complete = motor_event(seconds)
+        self.motor_event_complete = motor_event(seconds).trigger()
+        self.stop_motor()
 
     def stop_motor(self):
         override_stop = [1500] * 16
         chan8 = override_stop[:8]
         self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
 
-    def yaxis_motor(self, speed, seconds):
-        '''control the bottom 4 motors fwd/rev'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
+    '''
+    args = [direction, pwm, seconds]
+    roll - 1
+    pitch - 2
+    throttle - 3
+    yaw - 4
+    forward - 6
+    lateral - 7
+    '''
+    def cmd_move(self, args):
+        if len(args) != 3:
+            return "Usage: move <x|y|z|roll|yaw> pwm seconds"
+        elif args[0] == "x":
+            self.rc_manager.set_override([1500 1500 1500 1500 1500 1500 args[1] 1500])
+            self.wait_motor(args[2])
+            return
+        elif args[0] == "y":
+            self.rc_manager.set_override([1500 1500 args[1] 1500 1500 args[1] 1500 1500])
+            self.wait_motor(args[2])
+            return
+        elif args[0] == "z":
+            self.rc_manager.set_override([1500 1500 1500 1500 1500 1500 1500 1500])
+            self.wait_motor(args[2])
+            return
+        elif args[0] == "roll":
+            self.rc_manager.set_override([args[1] 1500 1500 1500 1500 1500 1500 1500])
+            self.wait_motor(args[2])
+            return
+        elif args[0] == "yaw":
+            self.rc_manager.set_override([1500 1500 1500 args[1] 1500 1500 1500 1500])
+            self.wait_motor(args[2])
+            return
+        else:
+            return "Usage: move <x|y|z|roll|yaw> pwm seconds"
 
+    '''
+    def yaxis_motor(self, speed, seconds):
+        #control the bottom 4 motors fwd/rev
         self.rc_manager.set_override([speed,speed,speed,speed, 1500, 1500, 0, 0])
-
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(speed)]
-        #self.rc_manager(args)
-=======
-        self.motor_event_enabled = True
         self.motor_event_complete = self.motor_event(seconds)
-    
-    def stop_motor(self):
-   
-        args = ["all", "1500"]
-        self.rc_manager.cmd_rc(args)
-        #chan8 = [1500,1500,1500,1500,1500,1500,1100,1500]
-        #self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
-    
-    def yaxis_motor(self, speed, seconds):
-        '''control the bottom 4 motors fwd/rev'''
-        args = ["5" , str(speed)]
-        self.rc_manager.cmd_rc(args)
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
 
+    def yaxis_motor(self, speed, seconds):
+        #control the bottom 4 motors fwd/rev
         self.wait_motor(seconds)
 
     def xaxis_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
-<<<<<<< HEAD
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-
+        #control the bottom 4 motors left/right
         self.rc_manager.set_override([speed,cw_speed,cw_speed,speed, 1500, 1500, 0, 0])
-
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(speed)]
-        #self.rc_manager(args)
-=======
-        args = ["6" , str(speed)]
-        self.rc_manager.cmd_rc(args)
-       
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
-
         self.wait_motor(seconds)
 
     def zaxis_motor(self, speed, seconds):
-<<<<<<< HEAD
-        '''control the bottom 4 motors left/right'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-
+        #control the bottom 4 motors left/right
         self.rc_manager.set_override([1500,1500,1500,1500,speed,cw_speed,0,0])
-
-        #args = ["5",str(speed)]
-        #self.rc_manager(args)
-        #args = ["6",str(cw_speed)]
-
         self.wait_motor(seconds)
 
     def roll_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
+        #control the bottom 4 motors left/right
         self.rc_manager.set_override([1500,1500,1500,1500,speed,speed,0,0])
-        #args = ["5",str(speed)]
-        #self.rc_manager(args)
-        #args = ["6",str(speed)]
-
         self.wait_motor(seconds)
 
     def yaw_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
-
-        offset = speed - 1500
-        cw_speed = 1500 - offset
+        #control the bottom 4 motors left/right
         self.rc_manager.set_override([speed,cw_speed,speed,cw_speed, 1500, 1500, 0, 0])
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(cw_speed)]
-        #self.rc_manager(args)
-
-=======
-        args = ["3" , str(speed)]
-        self.rc_manager.cmd_rc(args)
-        
         self.wait_motor(seconds)
 
     def roll_motor(self, speed, seconds):
-        args = ["2" , str(speed)]
-        self.rc_manager.cmd_rc(args)
-        
+        self.rc_manager.set_override([])
         self.wait_motor(seconds)
 
-    def yaw_motor(self, speed, seconds):
-        args = ["4" , str(speed)]
-        self.rc_manager.cmd_rc(args)
-      
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
-        self.wait_motor(seconds)
-
+    '''
 
     def idle_task(self):
         '''handle missing waypoints'''
@@ -335,13 +329,9 @@ class motor_event(object):
         if self.motor_event_enabled:
             if(self.motor_event_complete.trigger()):
                 self.stop_motor()
-<<<<<<< HEAD
 
     def sensor_update(self, SCALED_PRESSURE2):
         self.motor_event_complete = None
-=======
-                self.motor_event_enabled = False
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
         if self.enable_temp_poll:
             now = time.time()
             if(now - self.last_poll > self.poll_interval):
@@ -413,7 +403,7 @@ class motor_event(object):
         elif mtype in ['WAYPOINT', 'MISSION_ITEM'] and self.wp_manager.wp_op != None:
             if m.seq < self.wp_manager.wploader.count():
                 #print("DUPLICATE %u" % m.seq)
-                return
+
             if m.seq+1 > self.wp_manager.wploader.expected_count:
                 self.wp_manager.console.writeln("Unexpected waypoint number %u - expected %u" % (m.seq, self.wp_manager.wploader.count()))
             self.wp_manager.wp_received[m.seq] = m
@@ -425,7 +415,7 @@ class motor_event(object):
             if self.wp_manager.wploader.count() != self.wp_manager.wploader.expected_count:
                 #print("m.seq=%u expected_count=%u" % (m.seq, self.wp_manager.wploader.expected_count))
                 self.wp_manager.send_wp_requests()
-                return
+
             if self.wp_manager.wp_op == 'list':
                 for i in range(self.wp_manager.wploader.count()):
                     w = self.wp_manager.wploader.wp(i)
@@ -499,9 +489,32 @@ class motor_event(object):
             elif self.fence_manager.enabled == True and self.fence_manager.healthy == False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
 
+class motor_event(object):
+    '''a class for fixed frequency events'''
+    def __init__(self, seconds):
+        self.seconds = seconds
+        self.curr_time = time.time()
+        self.final_time = self.curr_time + seconds
+
+    def force(self):
+        '''force immediate triggering'''
+        self.curr_time = 0
+
+    def trigger(self):
+        ''' True if we should trigger now'''
+        tnow = time.time()
+
+        if tnow < self.curr_time:
+            print("Warning, time moved backwards. Restarting timer.")
+            tnow = self.curr_time
+
+        if tnow >= self.final_time:
+            self.last_time = tnow
+             True
+         False
 
 
 
 def init(mpstate):
     '''initialise module'''
-    return AUVModule(mpstate)
+     AUVModule(mpstate)
