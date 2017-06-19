@@ -14,6 +14,7 @@ from MAVProxy.modules.lib import mp_settings
 from MAVProxy.modules.mavproxy_auto import mp_waypoint
 from MAVProxy.modules.mavproxy_auto import mp_rc
 from MAVProxy.modules.mavproxy_auto import mp_fence
+from MAVProxy.modules.mavproxy_auto import SerialReader
 
 
 class AUVModule(mp_module.MPModule):
@@ -47,6 +48,8 @@ class AUVModule(mp_module.MPModule):
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence', 'dense'])
         self.add_command('move', self.cmd_move, "Movement", ['<x|y|z|roll|yaw>', 'pwm', 'seconds'])
         self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
+        self.sensor_reader = SerialReader.SerialReader()
+
 
         '''Test variables'''
         self.enable_temp_poll = False
@@ -105,6 +108,8 @@ class AUVModule(mp_module.MPModule):
             self.test6()
         elif args[0] == "7":
             self.test7()
+        elif args[0] == "R":
+             print(self.sensor_reader.read(0))
 
     '''unit test delete later '''
     def test1(self):
@@ -235,12 +240,8 @@ class AUVModule(mp_module.MPModule):
         return forward_travel_distance
 
     def wait_motor(self, seconds):
+        self.motor_event_enabled = True
         self.motor_event_complete = motor_event(seconds)
-
-    def stop_motor(self):
-        override_stop = [1500] * 16
-        chan8 = override_stop[:8]
-        self.master.mav.rc_channels_override_send(self.target_system,self.target_component, *chan8)
 
     '''
     args = [direction, pwm, seconds]
@@ -277,6 +278,11 @@ class AUVModule(mp_module.MPModule):
         else:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
 
+
+    def stop_motor(self):
+        args = ["all", "1500"]
+        self.rc_manager.cmd_rc(args)
+
     def idle_task(self):
         '''handle missing waypoints'''
         if self.wp_manager.wp_period.trigger():
@@ -298,7 +304,6 @@ class AUVModule(mp_module.MPModule):
                 self.stop_motor()
 
     def sensor_update(self, SCALED_PRESSURE2):
-        self.motor_event_complete = None
         if self.enable_temp_poll:
             now = time.time()
             if(now - self.last_poll > self.poll_interval):
