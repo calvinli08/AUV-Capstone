@@ -47,7 +47,7 @@ class AUVModule(mp_module.MPModule):
         '''Test variables'''
         self.enable_temp_poll = False
         self.last_poll = time.time()
-        self.poll_interval = 7 '''seconds'''
+        self.poll_interval = 7
 
     def usage(self):
         '''show help on command line options'''
@@ -196,7 +196,6 @@ class motor_event(object):
         return False
 
     def wait_motor(self, seconds):
-<<<<<<< HEAD
         self.motor_event_complete = motor_event(seconds)
 
     def stop_motor(self):
@@ -206,10 +205,7 @@ class motor_event(object):
 
     def yaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors fwd/rev'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-
-        self.rc_manager.set_override([speed,speed,speed,speed, 1500, 1500, 0, 0])
+        
 
         #args = ["1",str(speed)]
         #self.rc_manager(args)
@@ -219,7 +215,6 @@ class motor_event(object):
         #self.rc_manager(args)
         #args = ["4",str(speed)]
         #self.rc_manager(args)
-=======
         self.motor_event_enabled = True
         self.motor_event_complete = self.motor_event(seconds)
     
@@ -234,73 +229,20 @@ class motor_event(object):
         '''control the bottom 4 motors fwd/rev'''
         args = ["5" , str(speed)]
         self.rc_manager.cmd_rc(args)
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
+
 
         self.wait_motor(seconds)
 
     def xaxis_motor(self, speed, seconds):
         '''control the bottom 4 motors left/right'''
-<<<<<<< HEAD
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-
-        self.rc_manager.set_override([speed,cw_speed,cw_speed,speed, 1500, 1500, 0, 0])
-
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(speed)]
-        #self.rc_manager(args)
-=======
         args = ["6" , str(speed)]
         self.rc_manager.cmd_rc(args)
        
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
-
         self.wait_motor(seconds)
 
     def zaxis_motor(self, speed, seconds):
-<<<<<<< HEAD
-        '''control the bottom 4 motors left/right'''
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-
-        self.rc_manager.set_override([1500,1500,1500,1500,speed,cw_speed,0,0])
-
-        #args = ["5",str(speed)]
-        #self.rc_manager(args)
-        #args = ["6",str(cw_speed)]
-
-        self.wait_motor(seconds)
-
-    def roll_motor(self, speed, seconds):
-        '''control the bottom 4 motors left/right'''
-        self.rc_manager.set_override([1500,1500,1500,1500,speed,speed,0,0])
-        #args = ["5",str(speed)]
-        #self.rc_manager(args)
-        #args = ["6",str(speed)]
-
-        self.wait_motor(seconds)
-
-    def yaw_motor(self, speed, seconds):
         '''control the bottom 4 motors left/right'''
 
-        offset = speed - 1500
-        cw_speed = 1500 - offset
-        self.rc_manager.set_override([speed,cw_speed,speed,cw_speed, 1500, 1500, 0, 0])
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(cw_speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(cw_speed)]
-        #self.rc_manager(args)
-
-=======
         args = ["3" , str(speed)]
         self.rc_manager.cmd_rc(args)
         
@@ -315,8 +257,11 @@ class motor_event(object):
     def yaw_motor(self, speed, seconds):
         args = ["4" , str(speed)]
         self.rc_manager.cmd_rc(args)
-      
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
+        self.wait_motor(seconds)
+        
+    def pitch_motor(self, speed, seconds):
+        args = ["1" , str(speed)]
+        self.rc_manager.cmd_rc(args)
         self.wait_motor(seconds)
 
 
@@ -339,13 +284,8 @@ class motor_event(object):
         if self.motor_event_enabled:
             if(self.motor_event_complete.trigger()):
                 self.stop_motor()
-<<<<<<< HEAD
-
-    def sensor_update(self, SCALED_PRESSURE2):
-        self.motor_event_complete = None
-=======
+                self.motor_event_complete = None
                 self.motor_event_enabled = False
->>>>>>> 3035ed72e7f8fe1cf4a37ff362f5bc5aaeb39600
         if self.enable_temp_poll:
             now = time.time()
             if(now - self.last_poll > self.poll_interval):
