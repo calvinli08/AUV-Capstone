@@ -6,6 +6,7 @@ import sys
 from pymavlink import mavutil
 import errno
 import time
+import threading
 
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
@@ -35,6 +36,8 @@ class AUVModule(mp_module.MPModule):
 
         self.pressure_sensor = [0] * 3
         self.depth_sensor = [0] * 3
+
+        self.last_waypoint = None
 
         self.motor_event_complete = None
         self.motor_event_enabled = False
@@ -107,33 +110,33 @@ class AUVModule(mp_module.MPModule):
     def test1(self):
         '''xmotor test'''
         '''move foward for 3 seconds'''
-        self.xaxis_motor(1510,1)
+        self.cmd_move(['x', 1510, 1])
         '''move backward for 3 seconds'''
-        self.xaxis_motor(1490,1)
+        self.cmd_move(['x', 1490, 1])
 
     '''unit test delete later '''
     def test2(self):
         '''ymotor test'''
         '''strafe left for 3 seconds'''
-        self.yaxis_motor(1510,1)
+        self.cmd_move(['y', 1510, 1])
         '''strafe right for 3 seconds'''
-        self.yaxis_motor(1490,1)
+        self.cmd_move(['y', 1490, 1])
 
     '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
         '''roll cw  for 3 seconds'''
-        self.roll_motor(1510,1)
+        self.cmd_move(['roll', 1510, 1])
         '''roll ccw for 3 seconds'''
-        self.roll_motor(1490,1)
+        self.cmd_move(['roll', 1490, 1])
 
     '''unit test delete later '''
     def test4(self):
         '''yaw motor test'''
         '''turn left  for 3 seconds'''
-        self.yaw_motor(1510,1)
+        self.cmd_move(['yaw', 1510, 1])
         '''turn right for 3 seconds'''
-        self.yaw_motor(1490,1)
+        self.cmd_move(['yaw', 1490, 1])
 
     '''unit test delete later'''
     def test5(self):
@@ -183,13 +186,12 @@ class AUVModule(mp_module.MPModule):
                 print "otherwise!"
         else:
             print "done orienting!"
-            self.stop_motor()
+            return
 
     #traverse
     def traverse_and_sample(self, start_time, time = 1):
         self.cmd_move(['y', 1800, 20])
         print "traversing!"
-        self.stop_motor()
         return self.sample()
 
     '''test with default values, delete later'''
@@ -199,27 +201,27 @@ class AUVModule(mp_module.MPModule):
         dense traverse makes more loops within a smaller area. It accomplishes this by traveling 1/5 the width of sparse traverse for it's width portion, and minute steps for it's length.
         '''
 
-        print "orangutan"
+        print "ONE"
         if forward_distance_to_edge < forward_travel_distance:
             forward_travel_distance = forward_distance_to_edge - 2
         elif loops < sideways_distance:
             sideways_distance = sideways_distance/2
 
-        print "pie"
+        print "TWO"
         start_time = int(time.time())
         left_direction = heading - 90
         right_direction = heading + 90
 
         self.orient_heading(right_direction)
-        print "matilda"
+        print "THREE"
         previous_direction = right_direction
         self.traverse_and_sample(sideways_distance)
-        print "mockingbird"
+        print "FOUR"
 
         for j in xrange(distance):
             self.orient_heading(heading)
             self.traverse_and_sample()
-            print "blueberry jam"
+            print "FIVE"
             previous_direction += 180
             self.orient_heading(previous_direction)
             self.traverse_and_sample(sideways_distance)
@@ -233,13 +235,12 @@ class AUVModule(mp_module.MPModule):
         return forward_travel_distance
 
     def wait_motor(self, seconds):
-        self.motor_event_complete = motor_event(seconds).trigger()
-        self.stop_motor()
+        self.motor_event_complete = motor_event(seconds)
 
     def stop_motor(self):
         override_stop = [1500] * 16
         chan8 = override_stop[:8]
-        self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
+        self.master.mav.rc_channels_override_send(self.target_system,self.target_component, *chan8)
 
     '''
     args = [direction, pwm, seconds]
@@ -275,42 +276,6 @@ class AUVModule(mp_module.MPModule):
             return
         else:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
-
-    '''
-    def yaxis_motor(self, speed, seconds):
-        #control the bottom 4 motors fwd/rev
-        self.rc_manager.set_override([speed,speed,speed,speed, 1500, 1500, 0, 0])
-        self.motor_event_complete = self.motor_event(seconds)
-
-    def yaxis_motor(self, speed, seconds):
-        #control the bottom 4 motors fwd/rev
-        self.wait_motor(seconds)
-
-    def xaxis_motor(self, speed, seconds):
-        #control the bottom 4 motors left/right
-        self.rc_manager.set_override([speed,cw_speed,cw_speed,speed, 1500, 1500, 0, 0])
-        self.wait_motor(seconds)
-
-    def zaxis_motor(self, speed, seconds):
-        #control the bottom 4 motors left/right
-        self.rc_manager.set_override([1500,1500,1500,1500,speed,cw_speed,0,0])
-        self.wait_motor(seconds)
-
-    def roll_motor(self, speed, seconds):
-        #control the bottom 4 motors left/right
-        self.rc_manager.set_override([1500,1500,1500,1500,speed,speed,0,0])
-        self.wait_motor(seconds)
-
-    def yaw_motor(self, speed, seconds):
-        #control the bottom 4 motors left/right
-        self.rc_manager.set_override([speed,cw_speed,speed,cw_speed, 1500, 1500, 0, 0])
-        self.wait_motor(seconds)
-
-    def roll_motor(self, speed, seconds):
-        self.rc_manager.set_override([])
-        self.wait_motor(seconds)
-
-    '''
 
     def idle_task(self):
         '''handle missing waypoints'''
@@ -491,6 +456,7 @@ class AUVModule(mp_module.MPModule):
             elif self.fence_manager.enabled == True and self.fence_manager.healthy == False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
 
+
 class motor_event(object):
     '''a class for fixed frequency events'''
     def __init__(self, seconds):
@@ -514,7 +480,6 @@ class motor_event(object):
             self.last_time = tnow
             return True
         return False
-
 
 def init(mpstate):
     '''initialise module'''
