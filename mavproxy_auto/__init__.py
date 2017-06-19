@@ -196,30 +196,11 @@ class motor_event(object):
         return False
 
     def wait_motor(self, seconds):
+        self.motor_event_enabled = True
         self.motor_event_complete = motor_event(seconds)
 
-    def stop_motor(self):
-        override_stop = [1500] * 16
-        chan8 = override_stop[:8]
-        self.master.mav.rc_channels_override_send(self.target_system,self.target_component,*chan8)
-
-    def yaxis_motor(self, speed, seconds):
-        '''control the bottom 4 motors fwd/rev'''
-        
-
-        #args = ["1",str(speed)]
-        #self.rc_manager(args)
-        #args = ["2",str(speed)]
-        #self.rc_manager(args)
-        #args = ["3",str(speed)]
-        #self.rc_manager(args)
-        #args = ["4",str(speed)]
-        #self.rc_manager(args)
-        self.motor_event_enabled = True
-        self.motor_event_complete = self.motor_event(seconds)
     
     def stop_motor(self):
-   
         args = ["all", "1500"]
         self.rc_manager.cmd_rc(args)
         #chan8 = [1500,1500,1500,1500,1500,1500,1100,1500]
