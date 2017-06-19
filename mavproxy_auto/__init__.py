@@ -13,6 +13,7 @@ from MAVProxy.modules.lib import mp_settings
 from MAVProxy.modules.mavproxy_auto import mp_waypoint
 from MAVProxy.modules.mavproxy_auto import mp_rc
 from MAVProxy.modules.mavproxy_auto import mp_fence
+from MAVProxy.modules.mavproxy_auto import SerialReader
 
 class AUVModule(mp_module.MPModule):
     def __init__(self, mpstate):
@@ -40,6 +41,7 @@ class AUVModule(mp_module.MPModule):
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
+        self.sensor_reader = SerialReader.SerialReader()
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence','test (number)'])
 
         '''Test variables'''
@@ -97,6 +99,8 @@ class AUVModule(mp_module.MPModule):
             self.test6()
         elif args[0] == "7":
             self.test7()
+        elif args[0] == "R":
+             print(self.sensor_reader.read(0))
 
     '''unit test delete later '''
     def test1(self):
