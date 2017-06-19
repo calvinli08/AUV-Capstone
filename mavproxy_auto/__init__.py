@@ -159,7 +159,6 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test7(self):
         '''waypoint testing'''
-
         self.enable_temp_poll = True
         f = open('testfile.txt', 'w')
         f.write('QGC WPL 110\n')
@@ -171,8 +170,39 @@ class AUVModule(mp_module.MPModule):
         args = ["load" , "testfile.txt"]
         self.wp_manager.cmd_wp(args)
 
-    def cmd_underwater(self):
-        return "Not yet implemented"
+    def cmd_underwater(self, args):
+        if len(args) != 1:
+            return "Usage: auto underwater start"
+        elif args[0] == "start":
+            self.run()
+        else:
+            return "Usage: auto underwater start"
+
+    def run(self):
+        mav.set_mode_manual()
+        rc.set_mode_manual()
+        mav.motors_armed_wait()
+        #set the apm mav_type
+        mav.mode_mapping()
+
+        if self.predive_check() is not True:
+            return "Insufficient Battery"
+
+        self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon, self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+
+        self.intended_heading = mp_util.gps_bearing(self.lat, self.lon, self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+
+        self.orient_heading(self.intended_heading)
+
+        self.pollution_array = None
+
+        #x = lat, y = lng
+        self.dive([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, self.intended_heading, 1, 1)
+
+        self.underwater_traverse([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, heading)
+
+        self.surface()
+        return
 
     def cmd_geofence(self, args):
         return "Not yet implemented"
@@ -184,24 +214,27 @@ class AUVModule(mp_module.MPModule):
     def orient_heading(self, intended_heading):
         while intended_heading > 5:
             if intended_heading > 0:
-                self.cmd_move(['yaw', 1800, 20])
+                self.cmd_move(['yaw', 1800, 1])
                 print "orienting!"
             else:
-                self.cmd_move(['yaw', 1200, 20])
+                self.cmd_move(['yaw', 1200, 1])
                 print "otherwise!"
         else:
             print "done orienting!"
             return
 
+    def surface(self, time):
+        self.cmd_move(['z', 1600, time])
+
     #traverse
-    def traverse_and_sample(self, start_time, time = 1):
-        self.cmd_move(['y', 1800, 20])
+    def traverse_and_sample(self, channel = 1, time = 1):
+        self.cmd_move(['y', 1800, time])
         print "traversing!"
-        return self.sample()
+        return self.sensor_reader.read(channel)
 
     '''test with default values, delete later'''
     #dense traverse function that is called when pollution is above a threshold
-    def dense_traverse(self, start, end, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
+    def dense_traverse(self, start, end, channel = 1, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
         '''
         dense traverse makes more loops within a smaller area. It accomplishes this by traveling 1/5 the width of sparse traverse for it's width portion, and minute steps for it's length.
         '''
@@ -220,22 +253,22 @@ class AUVModule(mp_module.MPModule):
         self.orient_heading(right_direction)
         print "THREE"
         previous_direction = right_direction
-        self.traverse_and_sample(sideways_distance)
+        self.traverse_and_sample(channel, sideways_distance)
         print "FOUR"
 
         for j in xrange(distance):
             self.orient_heading(heading)
-            self.traverse_and_sample()
+            self.traverse_and_sample(channel)
             print "FIVE"
             previous_direction += 180
             self.orient_heading(previous_direction)
-            self.traverse_and_sample(sideways_distance)
+            self.traverse_and_sample(channel, sideways_distance)
 
         self.orient_heading(heading)
         self.traverse_and_sample()
         previous_direction += 180
         self.orient_heading(previous_direction)
-        self.traverse_and_sample(sideways_distance/2)
+        self.traverse_and_sample(channel, sideways_distance/2)
 
         return forward_travel_distance
 
@@ -288,7 +321,7 @@ class AUVModule(mp_module.MPModule):
         if self.wp_manager.wp_period.trigger():
             # cope with packet loss fetching mission
             if self.master is not None and self.master.time_since('MISSION_ITEM') >= 2 and self.wp_manager.wploader.count() < getattr(self.wp_manager.wploader,'expected_count',0):
-                wps = self.wp_manager.missing_wps_to_request();
+                wps = self.wp_manager.missing_wps_to_request()
                 print("re-requesting WPs %s" % str(wps))
                 self.wp_manager.send_wp_requests(wps)
         if self.rc_manager.override_period.trigger():
@@ -300,7 +333,7 @@ class AUVModule(mp_module.MPModule):
                 if self.rc_manager.override_counter > 0:
                     self.rc_manager.override_counter -= 1
         if self.motor_event_enabled:
-            if(self.motor_event_complete.trigger()):
+            if self.motor_event_complete.trigger():
                 self.stop_motor()
 
     def sensor_update(self, SCALED_PRESSURE2):
