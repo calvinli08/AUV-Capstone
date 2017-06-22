@@ -57,12 +57,6 @@ class AUVModule(mp_module.MPModule):
         self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
         self.sensor_reader = SerialReader.SerialReader()
 
-
-        '''Test variables'''
-        self.enable_temp_poll = False
-        self.last_poll = time.time()
-        self.poll_interval = 7
-
     def usage(self):
         '''show help on command line options'''
         return "Usage: auto <dense|setfence|surface|underwater>"
@@ -117,51 +111,58 @@ class AUVModule(mp_module.MPModule):
             self.test7()
         elif args[0] == "R":
              print(self.sensor_reader.read(0))
+        return
 
     '''unit test delete later '''
     def test1(self):
         '''xmotor test'''
         '''move foward for 3 seconds'''
-        self.cmd_move(['x', 1510, 1])
-        '''move backward for 3 seconds'''
-        self.cmd_move(['x', 1490, 1])
+        self.cmd_move(['x', 1550, 1])
+
+	    self.cmd_move(['x',1550,1])
+	    '''move backward for 3 seconds'''
 
     '''unit test delete later '''
     def test2(self):
         '''ymotor test'''
         '''strafe left for 3 seconds'''
-        self.cmd_move(['y', 1510, 1])
+        self.cmd_move(['y', 1550, 1])
         '''strafe right for 3 seconds'''
-        self.cmd_move(['y', 1490, 1])
+        self.cmd_move(['y', 1450, 1])
 
     '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
         '''roll cw  for 3 seconds'''
-        self.cmd_move(['roll', 1510, 1])
+        self.cmd_move(["roll", 1550, 1])
         '''roll ccw for 3 seconds'''
-        self.cmd_move(['roll', 1490, 1])
+        self.cmd_move(["roll", 1450, 1])
 
     '''unit test delete later '''
     def test4(self):
         '''yaw motor test'''
         '''turn left  for 3 seconds'''
-        self.cmd_move(['yaw', 1510, 1])
+        self.cmd_move(["yaw", 1550, 1])
         '''turn right for 3 seconds'''
-        self.cmd_move(['yaw', 1490, 1])
+        self.cmd_move(["yaw", 1450, 1])
 
     '''unit test delete later'''
     def test5(self):
         '''z motor test'''
         '''dive for 3 seconds'''
-        self.zaxis_motor(1490,1)
-        '''surface for 3 seconds'''
-        self.zaxis_motor(1510,1)
+        #self.zaxis_motor(1450,1)
+        self.cmd_move(['z',1450,1])
+     	self.cmd_move(['z',1550,1])
+	    '''surface for 3 seconds'''
+        #self.zaxis_motor(1550,1)
 
     '''unit test delete later '''
     def test6(self):
         '''sensor polling'''
-        self.enable_temp_poll = True
+        self.cmd_move(['x',1550,3])
+        self.cmd_move(["yaw",1550,2])
+	    self.cmd_move(['x',1550,5])
+	    self.cmd_move(["yaw",1550,5])
 
     '''unit test delete later '''
     def test7(self):
@@ -206,6 +207,7 @@ class AUVModule(mp_module.MPModule):
         array_edges = self.calculate_geofence_edge_lengths()
         self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
 
+<<<<<<< HEAD
         # x = lat, y = lng
         self.dive([self.lng, self.lat],
                   [self.next_wp.MAVLink_mission_item_message.y,
@@ -219,6 +221,14 @@ class AUVModule(mp_module.MPModule):
 
         self.surface()
 
+=======
+        #x = lat, y = lng
+        #self.dive([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, self.intended_heading, 1, 1)
+
+        #self.underwater_traverse([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, heading)
+
+        #self.surface()
+>>>>>>> cf02e5694fdf089cc9b9be0216e049074cd1880b
         return
 
     def cmd_geofence(self, args):
@@ -244,12 +254,12 @@ class AUVModule(mp_module.MPModule):
         while intended_heading > 5:
             if intended_heading > 0:
                 self.cmd_move(['yaw', 1800, 1])
-                print "orienting!"
+                print("orienting!")
             else:
                 self.cmd_move(['yaw', 1200, 1])
-                print "otherwise!"
+                print("otherwise!")
         else:
-            print "done orienting!"
+            print("done orienting!")
             return
 
     def surface(self, time):
@@ -263,6 +273,7 @@ class AUVModule(mp_module.MPModule):
     # traverse
     def traverse(self, time = 1):
         self.cmd_move(['y', 1800, time])
+<<<<<<< HEAD
         return
 
     def sample(self, channel = 1):
@@ -284,13 +295,14 @@ class AUVModule(mp_module.MPModule):
             if distance == 1:
                 self.loops += 1
             return
+=======
+        print("traversing!")
+        return self.sensor_reader.read(channel)
+>>>>>>> cf02e5694fdf089cc9b9be0216e049074cd1880b
 
     '''test with default values, delete later'''
     #dense traverse function that is called when pollution is above a threshold
     def dense_traverse(self, start, end, channel = 1, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
-        '''
-        dense traverse makes more loops within a smaller area. It accomplishes this by traveling 1/5 the width of sparse traverse for it's width portion, and minute steps for it's length.
-        '''
 
         print "ONE"
         if forward_distance_to_edge < forward_travel_distance:
@@ -326,8 +338,12 @@ class AUVModule(mp_module.MPModule):
         return forward_travel_distance
 
     def wait_motor(self, seconds):
-        self.motor_event_enabled = True
         self.motor_event_complete = motor_event(seconds)
+	    while(self.motor_event_complete.trigger() == False):
+            start_time = int(time.time())
+            print("Waiting")
+	        time.sleep(0.5 - (int(time.time()) - start_time) % 0.5)
+	    self.stop_motor()
 
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
@@ -338,6 +354,7 @@ class AUVModule(mp_module.MPModule):
                 self.sample(channel)
                 start_time = int(time.time())
                 time.sleep(60 - (int(time.time()) - start_time) % 60)
+
     '''
     args = [direction, pwm, seconds]
     roll - 1
@@ -346,35 +363,46 @@ class AUVModule(mp_module.MPModule):
     yaw - 4
     forward - 6
     lateral - 7
+    source: https://github.com/bluerobotics/ardusub/blob/master/libraries/AP_RCMapper/AP_RCMapper.cpp
     '''
     def cmd_move(self, args):
         if len(args) != 3:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
         elif args[0] == "x":
-            self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, int(args[1]), 1500,])
+            self.rc_manager.override[6] = int(args[1])
+            self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             self.track_xy(int(args[1]), 'x')
             return
         elif args[0] == "y":
-            self.rc_manager.set_override([1500, 1500, int(args[1]), 1500, 1500, int(args[1]), 1500, 1500,])
-            self.wait_motor(int(args[2]))
+            #This is how the joystick module does it
+            self.rc_manager.override[5] = int(args[1])
+            self.rc_manager.send_rc_override()
+	        self.wait_motor(int(args[2]))
             self.track_xy(int(args[1]), 'y')
             return
         elif args[0] == "z":
-            self.rc_manager.set_override([1500, 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
+            self.rc_manager.override[3] = args[1]
+            self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
         elif args[0] == "roll":
-            self.rc_manager.set_override([int(args[1]), 1500, 1500, 1500, 1500, 1500, 1500, 1500,])
+            self.rc_manager.override[0] = int(args[1])
+            self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
         elif args[0] == "yaw":
-            self.rc_manager.set_override([1500, 1500, 1500, int(args[1]), 1500, 1500, 1500, 1500,])
-            self.wait_motor(int(args[2]))
+            self.rc_manager.override[3] = args[1]
+            self.rc_manager.send_rc_override()
+	        self.wait_motor(int(args[2]))
+            return
+        elif args[0] == "pitch":
+            self.rc_manager.override[1] = args[1]
+            self.rc_manager.send_rc_override()
+	        self.wait_motor(int(args[2]))
             return
         else:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
-
 
     def stop_motor(self):
         args = ["all", "1500"]
@@ -389,7 +417,7 @@ class AUVModule(mp_module.MPModule):
                 print("re-requesting WPs %s" % str(wps))
                 self.wp_manager.send_wp_requests(wps)
         if self.rc_manager.override_period.trigger():
-            if (self.rc_manager.override != [ 0 ] * 16 or
+            if (self.rc_manager.override != [ 1500 ] * 16 or
                 self.rc_manager.override != self.rc_manager.last_override or
                 self.rc_manager.override_counter > 0):
                 self.rc_manager.last_override = self.rc_manager.override[:]
@@ -400,7 +428,6 @@ class AUVModule(mp_module.MPModule):
             if self.motor_event_complete.trigger():
                 self.stop_motor()
         self.sample(channel)
-
 
     def sensor_update(self, SCALED_PRESSURE2):
         if self.enable_temp_poll:
