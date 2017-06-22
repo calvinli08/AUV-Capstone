@@ -118,9 +118,8 @@ class AUVModule(mp_module.MPModule):
         '''xmotor test'''
         '''move foward for 3 seconds'''
         self.cmd_move(['x', 1550, 1])
-
-	    self.cmd_move(['x',1550,1])
-	    '''move backward for 3 seconds'''
+        self.cmd_move(['x', 1550, 1])
+        '''move backward for 3 seconds'''
 
     '''unit test delete later '''
     def test2(self):
@@ -150,19 +149,19 @@ class AUVModule(mp_module.MPModule):
     def test5(self):
         '''z motor test'''
         '''dive for 3 seconds'''
-        #self.zaxis_motor(1450,1)
+        # self.zaxis_motor(1450,1)
         self.cmd_move(['z',1450,1])
-     	self.cmd_move(['z',1550,1])
-	    '''surface for 3 seconds'''
-        #self.zaxis_motor(1550,1)
+        self.cmd_move(['z',1550,1])
+        '''surface for 3 seconds'''
+        # self.zaxis_motor(1550,1)
 
     '''unit test delete later '''
     def test6(self):
         '''sensor polling'''
         self.cmd_move(['x',1550,3])
         self.cmd_move(["yaw",1550,2])
-	    self.cmd_move(['x',1550,5])
-	    self.cmd_move(["yaw",1550,5])
+        self.cmd_move(['x',1550,5])
+        self.cmd_move(["yaw",1550,5])
 
     '''unit test delete later '''
     def test7(self):
@@ -321,11 +320,11 @@ class AUVModule(mp_module.MPModule):
 
     def wait_motor(self, seconds):
         self.motor_event_complete = motor_event(seconds)
-	    while self.motor_event_complete.trigger() is False:
+        while self.motor_event_complete.trigger() is False:
             start_time = int(time.time())
             print("Waiting")
-	        time.sleep(0.5 - (int(time.time()) - start_time) % 0.5)
-	    self.stop_motor()
+            time.sleep(0.5 - (int(time.time()) - start_time) % 0.5)
+        self.stop_motor()
 
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
@@ -343,16 +342,15 @@ class AUVModule(mp_module.MPModule):
                 self.sample(channel)
                 time.sleep(60 - (int(time.time()) - start_time) % 60)
 
-    '''
-    args = [direction, pwm, seconds]
-    roll - 1
-    pitch - 2
-    throttle - 3
-    yaw - 4
-    forward - 6
-    lateral - 7
-    source: https://github.com/bluerobotics/ardusub/blob/master/libraries/AP_RCMapper/AP_RCMapper.cpp
-    '''
+
+    # args = [direction, pwm, seconds]
+    # roll - 1
+    # pitch - 2
+    # throttle - 3
+    # yaw - 4
+    # forward - 6
+    # lateral - 7
+    # source: https://github.com/bluerobotics/ardusub/blob/master/libraries/AP_RCMapper/AP_RCMapper.cpp
     def cmd_move(self, args):
         if len(args) != 3:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
@@ -363,14 +361,14 @@ class AUVModule(mp_module.MPModule):
             self.track_xy(int(args[1]), 'x')
             return
         elif args[0] == "y":
-            #This is how the joystick module does it
+            # This is how the joystick module does it
             self.rc_manager.override[5] = int(args[1])
             self.rc_manager.send_rc_override()
-	        self.wait_motor(int(args[2]))
+            self.wait_motor(int(args[2]))
             self.track_xy(int(args[1]), 'y')
             return
         elif args[0] == "z":
-            self.rc_manager.override[3] = int(args[1])
+            self.rc_manager.override[2] = int(args[1])
             self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
@@ -382,12 +380,12 @@ class AUVModule(mp_module.MPModule):
         elif args[0] == "yaw":
             self.rc_manager.override[3] = int(args[1])
             self.rc_manager.send_rc_override()
-	        self.wait_motor(int(args[2]))
+            self.wait_motor(int(args[2]))
             return
         elif args[0] == "pitch":
             self.rc_manager.override[1] = int(args[1])
             self.rc_manager.send_rc_override()
-	        self.wait_motor(int(args[2]))
+            self.wait_motor(int(args[2]))
             return
         else:
             return "Usage: move <x|y|z|roll|yaw> pwm seconds"
@@ -600,6 +598,7 @@ class motor_event(object):
             self.last_time = tnow
             return True
         return False
+
 
 def init(mpstate):
     '''initialise module'''
