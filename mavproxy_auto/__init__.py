@@ -236,7 +236,7 @@ class AUVModule(mp_module.MPModule):
         self.fence_manager.cmd_fence(['load',filename])
 
     def orient_heading(self, intended_heading):
-        while intended_heading > 5:
+        while abs(intended_heading) > 5:
             if intended_heading > 0:
                 self.cmd_move(['yaw', 1800, 1])
                 print("orienting!")
@@ -336,6 +336,8 @@ class AUVModule(mp_module.MPModule):
                 time.sleep(60 - (int(time.time()) - start_time) % 60)
             else:
                 self.xy['x'] = len(self.pollution_array)
+            if direction == 'y':
+                sign *= -1
             while self.motor_event_enabled and self.loop%2 == 1:
                 start_time = int(time.time())
                 self.xy[direction] -= sign
