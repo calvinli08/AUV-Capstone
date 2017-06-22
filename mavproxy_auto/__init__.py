@@ -207,28 +207,14 @@ class AUVModule(mp_module.MPModule):
         array_edges = self.calculate_geofence_edge_lengths()
         self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
 
-<<<<<<< HEAD
-        # x = lat, y = lng
-        self.dive([self.lng, self.lat],
-                  [self.next_wp.MAVLink_mission_item_message.y,
-                  self.next_wp.MAVLink_mission_item_message.x],
-                  self.distance_to_waypoint,
-                  self.intended_heading, 1, 1)
+        self.dive()
 
+        # x = lat, y = lng
         self.underwater_traverse([self.lng, self.lat],
                                  [self.next_wp.MAVLink_mission_item_message.y,                       self.next_wp.MAVLink_mission_item_message.x],
                                  self.distance_to_waypoint, heading)
 
         self.surface()
-
-=======
-        #x = lat, y = lng
-        #self.dive([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, self.intended_heading, 1, 1)
-
-        #self.underwater_traverse([self.lng, self.lat], [self.next_wp.MAVLink_mission_item_message.y, self.next_wp.MAVLink_mission_item_message.x], self.distance_to_waypoint, heading)
-
-        #self.surface()
->>>>>>> cf02e5694fdf089cc9b9be0216e049074cd1880b
         return
 
     def cmd_geofence(self, args):
@@ -266,14 +252,14 @@ class AUVModule(mp_module.MPModule):
         self.cmd_move(['z', 1600, time])
         return
 
-    def dive(self, time):
+    def dive(self, time = 1):
         self.cmd_move(['z', 1400, time])
         return
 
     # traverse
     def traverse(self, time = 1):
         self.cmd_move(['y', 1800, time])
-<<<<<<< HEAD
+        print "traversing!"
         return
 
     def sample(self, channel = 1):
@@ -295,10 +281,6 @@ class AUVModule(mp_module.MPModule):
             if distance == 1:
                 self.loops += 1
             return
-=======
-        print("traversing!")
-        return self.sensor_reader.read(channel)
->>>>>>> cf02e5694fdf089cc9b9be0216e049074cd1880b
 
     '''test with default values, delete later'''
     #dense traverse function that is called when pollution is above a threshold
@@ -339,7 +321,7 @@ class AUVModule(mp_module.MPModule):
 
     def wait_motor(self, seconds):
         self.motor_event_complete = motor_event(seconds)
-	    while(self.motor_event_complete.trigger() == False):
+	    while self.motor_event_complete.trigger() is False:
             start_time = int(time.time())
             print("Waiting")
 	        time.sleep(0.5 - (int(time.time()) - start_time) % 0.5)
@@ -348,11 +330,17 @@ class AUVModule(mp_module.MPModule):
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
             sign = numpy.sign(pwm - 1500)
-            while self.motor_event_enabled:
-                # TODO account for when auv changes loops and thus starts moving from positive y to negative y
+            while self.motor_event_enabled and self.loop%2 == 0:
+                start_time = int(time.time())
                 self.xy[direction] += sign
                 self.sample(channel)
+                time.sleep(60 - (int(time.time()) - start_time) % 60)
+            else:
+                self.xy['x'] = len(self.pollution_array)
+            while self.motor_event_enabled and self.loop%2 == 1:
                 start_time = int(time.time())
+                self.xy[direction] -= sign
+                self.sample(channel)
                 time.sleep(60 - (int(time.time()) - start_time) % 60)
 
     '''
@@ -382,7 +370,7 @@ class AUVModule(mp_module.MPModule):
             self.track_xy(int(args[1]), 'y')
             return
         elif args[0] == "z":
-            self.rc_manager.override[3] = args[1]
+            self.rc_manager.override[3] = int(args[1])
             self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
@@ -392,12 +380,12 @@ class AUVModule(mp_module.MPModule):
             self.wait_motor(int(args[2]))
             return
         elif args[0] == "yaw":
-            self.rc_manager.override[3] = args[1]
+            self.rc_manager.override[3] = int(args[1])
             self.rc_manager.send_rc_override()
 	        self.wait_motor(int(args[2]))
             return
         elif args[0] == "pitch":
-            self.rc_manager.override[1] = args[1]
+            self.rc_manager.override[1] = int(args[1])
             self.rc_manager.send_rc_override()
 	        self.wait_motor(int(args[2]))
             return
