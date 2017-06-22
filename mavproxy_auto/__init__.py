@@ -256,14 +256,17 @@ class AUVModule(mp_module.MPModule):
         return
 
     # traverse
+    # assuming: one second = one meter
     def traverse(self, time = 1):
-        self.cmd_move(['y', 1800, time])
+        self.cmd_move(['x', 1800, time])
         print "traversing!"
         return
 
+    # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self, channel = 1):
-        pollution_array[self.xy['x']][self.xy['y']] = self.sensor_reader.read(channel)
-        return
+        pollution_value = self.sensor_reader.read(channel)
+        pollution_array[self.xy['x']][self.xy['y']] = pollution_value
+        return (pollution_value > 0.7)
 
     # underwater sparse traverse function
     def underwater_traverse(self, start, end, distance, heading, current = 1):
@@ -271,7 +274,8 @@ class AUVModule(mp_module.MPModule):
         end_time = int(time.time()) + distance + 10 #seconds
         '''Measure the run times and order of how this code segment runs'''
         while end_time - int(time.time()) >= 0:
-            if self.traverse(time.time()) > threshold:
+            self.traverse()
+            if self.sample():
                 elapsed_time = (int(time.time()) - start_time) + start_time
                 remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, end_time - int(time.time()), self.loops, heading, 5, 2, 1) - elapsed_time
                 end_time = int(time.time()) + remaining_distance + 10
