@@ -117,42 +117,106 @@ class AUVModule(mp_module.MPModule):
     def test1(self):
         '''xmotor test'''
         '''move foward for 3 seconds'''
+        f = open('/home/pi/motor_battery.txt', 'w')
+        f.write("%s, %s, %s, x before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         self.cmd_move(['x', 1550, 1])
-        self.cmd_move(['x', 1550, 1])
+
+        f.write("%s, %s, %s, x after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+
+        f.write("%s, %s, %s, x_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         '''move backward for 3 seconds'''
+        self.cmd_move(['x', 1450, 1])
+
+        f.write("%s, %s, %s, x_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+        f.close()
 
     '''unit test delete later '''
     def test2(self):
         '''ymotor test'''
         '''strafe left for 3 seconds'''
+        f = open('/home/pi/motor_battery.txt', 'w')
+        f.write("%s, %s, %s, y before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         self.cmd_move(['y', 1550, 1])
+
+        f.write("%s, %s, %s, y after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+        f.write("%s, %s, %s, y_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         '''strafe right for 3 seconds'''
         self.cmd_move(['y', 1450, 1])
+
+        f.write("%s, %s, %s, y_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+        f.close()
 
     '''unit test delete later '''
     def test3(self):
         '''roll motor test'''
         '''roll cw  for 3 seconds'''
+        f = open('/home/pi/motor_battery.txt', 'w')
+        f.write("%s, %s, %s, roll before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         self.cmd_move(["roll", 1550, 1])
+
+        f.write("%s, %s, %s, roll after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+        f.write("%s, %s, %s, roll_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+
         '''roll ccw for 3 seconds'''
         self.cmd_move(["roll", 1450, 1])
+
+        f.write("%s, %s, %s, roll_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+        f.close()
 
     '''unit test delete later '''
     def test4(self):
         '''yaw motor test'''
         '''turn left  for 3 seconds'''
+        f = open('/home/pi/motor_battery.txt', 'w')
+        f.write("%s, %s, %s, yaw before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         self.cmd_move(["yaw", 1550, 1])
+
+        f.write("%s, %s, %s, yaw after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+
+        f.write("%s, %s, %s, yaw_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+
         '''turn right for 3 seconds'''
         self.cmd_move(["yaw", 1450, 1])
+
+        f.write("%s, %s, %s, yaw_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+        f.close()
+
 
     '''unit test delete later'''
     def test5(self):
         '''z motor test'''
         '''dive for 3 seconds'''
+        f = open('/home/pi/motor_battery.txt', 'w')
+        f.write("%s, %s, %s, z before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         # self.zaxis_motor(1450,1)
         self.cmd_move(['z',1450,1])
+
+        f.write("%s, %s, %s, z after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
+        f.write("%s, %s, %s, z_surface before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+
         self.cmd_move(['z',1550,1])
         '''surface for 3 seconds'''
+
+        f.write("%s, %s, %s z_surface after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+        f.close()
+
+
         # self.zaxis_motor(1550,1)
 
     '''unit test delete later '''
@@ -186,34 +250,38 @@ class AUVModule(mp_module.MPModule):
             return "Usage: auto underwater start"
 
     def run(self):
-        mav.set_mode_manual()
-        rc.set_mode_manual()
-        mav.motors_armed_wait()
-        #set the apm mav_type
-        mav.mode_mapping()
+        while self.next_wp:
+            mav.set_mode_manual()
+            rc.set_mode_manual()
+            mav.motors_armed_wait()
+            #set the apm mav_type
+            mav.mode_mapping()
 
-        if self.predive_check() is not True:
-            return "Insufficient Battery"
+            if self.predive_check() is not True:
+                return "Insufficient Battery"
 
-        self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon,
-                                                         self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+            self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon,
+                                                             self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
-        self.intended_heading = mp_util.gps_bearing(self.lat, self.lon,
-                                                    self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+            self.intended_heading = mp_util.gps_bearing(self.lat, self.lon,
+                                                        self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
-        self.orient_heading(self.intended_heading)
+            self.orient_heading(self.intended_heading)
 
-        array_edges = self.calculate_geofence_edge_lengths()
-        self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
+            array_edges = self.calculate_geofence_edge_lengths()
+            self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
 
-        self.dive()
+            #self.dive()
 
-        # x = lat, y = lng
-        self.underwater_traverse([self.lng, self.lat],
-                                 [self.next_wp.MAVLink_mission_item_message.y,                       self.next_wp.MAVLink_mission_item_message.x],
-                                 self.distance_to_waypoint, heading)
+            # x = lat, y = lng
+            #self.underwater_traverse([self.lng, self.lat],
+                                    #  [self.next_wp.MAVLink_mission_item_message.y,                       self.next_wp.MAVLink_mission_item_message.x],
+                                    #  self.distance_to_waypoint, heading)
 
-        self.surface()
+            #self.surface()
+            #time.sleep(80)
+
+        numpy.savetxt('pollution_array.txt', self.pollution_array)
         return
 
     def cmd_geofence(self, args):
@@ -264,21 +332,25 @@ class AUVModule(mp_module.MPModule):
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self, channel = 1):
+        f = open('/home/pi/sensor_battery.txt', 'w')
+        f.write("%s, %s, %s, before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
         pollution_value = self.sensor_reader.read(channel)
         pollution_array[self.xy['x']][self.xy['y']] = pollution_value
+        f.write("%s, %s, %s, after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
+        f.close()
         return (pollution_value > 0.7)
 
     # underwater sparse traverse function
     def underwater_traverse(self, start, end, distance, heading, current = 1):
         start_time = int(time.time())
-        end_time = int(time.time()) + distance + 10 #seconds
+        end_time = int(time.time()) + distance + 1 #seconds
         '''Measure the run times and order of how this code segment runs'''
         while end_time - int(time.time()) >= 0:
             self.traverse()
             if self.sample():
                 elapsed_time = (int(time.time()) - start_time) + start_time
-                remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, end_time - int(time.time()), self.loops, heading, 5, 2, 1) - elapsed_time
-                end_time = int(time.time()) + remaining_distance + 10
+                remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, channel, end_time - int(time.time()), self.loops, heading, 5, 2, 1) - elapsed_time
+                end_time = int(time.time()) + remaining_distance + 1
         else:
             self.stop_motor()
             if distance == 1:
@@ -459,6 +531,7 @@ class AUVModule(mp_module.MPModule):
         self.battery_level = SYS_STATUS.battery_remaining
         self.voltage_level = SYS_STATUS.voltage_battery
         self.current_battery = SYS_STATUS.current_battery
+        return [self.battery_level, self.voltage_level, self.current_battery]
 
 
     def mavlink_packet(self, m):
@@ -537,6 +610,7 @@ class AUVModule(mp_module.MPModule):
             if wp is None:
                 # should we spit out a warning?!
                 # self.say("No waypoints")
+                self.next_wp = None
                 pass
             else:
                 if wp.command == mavutil.mavlink.MAV_CMD_DO_LAND_START:
