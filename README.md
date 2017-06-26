@@ -1,10 +1,10 @@
 # AUV-Capstone
 
-#Intro
+# Intro
 This is an implementation of the adaptive sampling algorithm proposed in [Pompili et al. (2012)](http://www.ece.rutgers.edu/~pompili/paper/05_paper29.pdf) on the BlueROV2 from BlueRobotics.
 The files included in this repository will prepare a BlueROV2 for autonomous navigation, via a MAVProxy module designed to be operated from the CLI. Before taking your AUV out for a dive, please carefully read the instructions below.
 
-##Materials
+## Materials
 
 This software requires a BlueROV2 for it to be loaded and used properly, although with minor modifications it can be used to automate other small submersibles.
 If a BlueROV2 has not yet been purchased and assembled according to the manufacturer's instructions, please go to
@@ -19,17 +19,17 @@ All the software that this code depends on is open-source:
 [ArduSub](https://www.ardusub.com/)
 [Python2.7](https://www.python.org/downloads/)
 
-##Work Environment
+## Work Environment
 
 There are two separate fronts that need to be understood before automating the ROV. Firstly, there is the hardware.
 Please become familiar with the navigational and electrical engineering concepts listed below in the order presented:
 
-###Hardware Concepts
-###Required Software
+### Hardware Concepts
+### Required Software
 
-##Loading this Module
+## Loading this Module
 
-##Pool Tests
+## Pool Tests
 
 __Caution__:
 
