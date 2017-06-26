@@ -23,8 +23,8 @@ class AUVModule(mp_module.MPModule):
         super(AUVModule, self).__init__(mpstate, "auto", "Telemetry Data for autonomous navigation", public = True)
 
         self.next_wp = [] #lat,lng
-        self.intended_heading = 0
-        self.pollution_array = None #initialize later
+        self.offset_from_intended_heading = 0
+        self.pollution_array = numpy.zeros([2, 2]) #initialize later
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
 
@@ -263,10 +263,10 @@ class AUVModule(mp_module.MPModule):
             self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon,
                                                              self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
-            self.intended_heading = mp_util.gps_bearing(self.lat, self.lon,
+            self.offset_from_intended_heading = mp_util.gps_bearing(self.lat, self.lon,
                                                         self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
-            self.orient_heading(self.intended_heading)
+            self.orient_heading(self.offset_from_intended_heading)
 
             array_edges = self.calculate_geofence_edge_lengths()
             self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
@@ -303,30 +303,30 @@ class AUVModule(mp_module.MPModule):
     def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load',filename])
 
-    def orient_heading(self, intended_heading):
-        while abs(intended_heading) > 5:
-            if intended_heading > 0:
-                self.cmd_move(['yaw', 1800, 1])
+    def orient_heading(self, offset_from_intended_heading):
+        while abs(offset_from_intended_heading) > 5:
+            if offset_from_intended_heading > 0:
+                self.cmd_move(['yaw', 1600, 3])
                 print("orienting!")
             else:
-                self.cmd_move(['yaw', 1200, 1])
+                self.cmd_move(['yaw', 1400, 3])
                 print("otherwise!")
         else:
             print("done orienting!")
             return
 
-    def surface(self, time):
+    def surface(self, time = 3):
         self.cmd_move(['z', 1600, time])
         return
 
-    def dive(self, time = 1):
+    def dive(self, time = 3):
         self.cmd_move(['z', 1400, time])
         return
 
     # traverse
     # assuming: one second = one meter
-    def traverse(self, time = 1):
-        self.cmd_move(['x', 1800, time])
+    def traverse(self, time = 3):
+        self.cmd_move(['f', 1600, time])
         print "traversing!"
         return
 
@@ -359,12 +359,12 @@ class AUVModule(mp_module.MPModule):
 
     '''test with default values, delete later'''
     #dense traverse function that is called when pollution is above a threshold
-    def dense_traverse(self, start, end, channel = 1, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
+    def dense_traverse(self, channel = 1, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
 
         print "ONE"
         if forward_distance_to_edge < forward_travel_distance:
             forward_travel_distance = forward_distance_to_edge - 2
-        elif loops < sideways_distance:
+        elif self.loops < sideways_distance:
             sideways_distance = sideways_distance/2
 
         print "TWO"
@@ -375,22 +375,22 @@ class AUVModule(mp_module.MPModule):
         self.orient_heading(right_direction)
         print "THREE"
         previous_direction = right_direction
-        self.traverse(channel, sideways_distance)
+        self.traverse(sideways_distance)
         print "FOUR"
 
-        for j in xrange(distance):
+        for j in xrange(forward_travel_distance):
             self.orient_heading(heading)
-            self.traverse(channel)
+            self.traverse(3)
             print "FIVE"
             previous_direction += 180
             self.orient_heading(previous_direction)
-            self.traverse(channel, sideways_distance)
+            self.traverse(sideways_distance)
 
         self.orient_heading(heading)
-        self.traverse()
+        self.traverse(3)
         previous_direction += 180
         self.orient_heading(previous_direction)
-        self.traverse(channel, sideways_distance/2)
+        self.traverse(sideways_distance/2)
 
         return forward_travel_distance
 
@@ -405,7 +405,7 @@ class AUVModule(mp_module.MPModule):
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
             sign = numpy.sign(pwm - 1500)
-            while self.motor_event_enabled and self.loop%2 == 0:
+            while self.motor_event_enabled and self.loop % 2 == 0:
                 start_time = int(time.time())
                 self.xy[direction] += sign
                 self.sample(channel)
@@ -414,7 +414,7 @@ class AUVModule(mp_module.MPModule):
                 self.xy['x'] = len(self.pollution_array)
             if direction == 'y':
                 sign *= -1
-            while self.motor_event_enabled and self.loop%2 == 1:
+            while self.motor_event_enabled and self.loop % 2 == 1:
                 start_time = int(time.time())
                 self.xy[direction] -= sign
                 self.sample(channel)
@@ -422,23 +422,22 @@ class AUVModule(mp_module.MPModule):
 
 
     # args = [direction, pwm, seconds]
-    # roll - 1
-    # pitch - 2
-    # throttle - 3
+    # roll - 3
+    # z - 2
     # yaw - 4
-    # forward - 6
-    # lateral - 7
+    # forward - 5
+    # lateral - 6
     # source: https://github.com/bluerobotics/ardusub/blob/master/libraries/AP_RCMapper/AP_RCMapper.cpp
     def cmd_move(self, args):
         if len(args) != 3:
-            return "Usage: move <x|y|z|roll|yaw> pwm seconds"
-        elif args[0] == "x":
-            self.rc_manager.override[6] = int(args[1])
+            return "Usage: move <f|l|z|roll|yaw> pwm seconds"
+        elif args[0] == "f":
+            self.rc_manager.override[4] = int(args[1])
             self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             self.track_xy(int(args[1]), 'x')
             return
-        elif args[0] == "y":
+        elif args[0] == "l":
             # This is how the joystick module does it
             self.rc_manager.override[5] = int(args[1])
             self.rc_manager.send_rc_override()
@@ -446,12 +445,12 @@ class AUVModule(mp_module.MPModule):
             self.track_xy(int(args[1]), 'y')
             return
         elif args[0] == "z":
-            self.rc_manager.override[2] = int(args[1])
+            self.rc_manager.override[1] = int(args[1])
             self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
         elif args[0] == "roll":
-            self.rc_manager.override[0] = int(args[1])
+            self.rc_manager.override[2] = int(args[1])
             self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
@@ -460,13 +459,8 @@ class AUVModule(mp_module.MPModule):
             self.rc_manager.send_rc_override()
             self.wait_motor(int(args[2]))
             return
-        elif args[0] == "pitch":
-            self.rc_manager.override[1] = int(args[1])
-            self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            return
         else:
-            return "Usage: move <x|y|z|roll|yaw> pwm seconds"
+            return "Usage: move <f|l|z|roll|yaw> pwm seconds"
 
     def stop_motor(self):
         args = ["all", "1500"]
