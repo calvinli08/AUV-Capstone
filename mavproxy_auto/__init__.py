@@ -484,14 +484,6 @@ class AUVModule(mp_module.MPModule):
                     self.rc_manager.override_counter -= 1
         self.sample(channel)
 
-    def sensor_update(self, SCALED_PRESSURE2):
-        if self.enable_temp_poll:
-            now = time.time()
-            if(now - self.last_poll > self.poll_interval):
-                self.last_poll = now
-                self.say("Depth sensor values: Press_abs: %f Press_diff: %f temperature: %d \n" % (self.depth_sensor[0],self.depth_sensor[1],self.depth_sensor[2]))
-                self.say("Pressure sensor values: Press_abs: %f Press_diff: %f temperature: %d \n" % (self.pressure_sensor[0],self.pressure_sensor[1],self.pressure_sensor[2]))
-
 
     def psensor_update(self, SCALED_PRESSURE2):
         '''update pressure sensor readings'''
