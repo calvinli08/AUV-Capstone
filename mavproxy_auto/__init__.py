@@ -482,9 +482,6 @@ class AUVModule(mp_module.MPModule):
                 self.rc_manager.send_rc_override()
                 if self.rc_manager.override_counter > 0:
                     self.rc_manager.override_counter -= 1
-        if self.motor_event_enabled:
-            if self.motor_event_complete.trigger():
-                self.stop_motor()
         self.sample(channel)
 
     def sensor_update(self, SCALED_PRESSURE2):
