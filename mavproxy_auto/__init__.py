@@ -22,13 +22,14 @@ class AUVModule(mp_module.MPModule):
         """Initialise module"""
         super(AUVModule, self).__init__(mpstate, "auto", "Telemetry Data for autonomous navigation", public = True)
 
+        '''Navigational information'''
         self.next_wp = [] #lat,lng
         self.offset_from_intended_heading = 0
         self.pollution_array = numpy.zeros([2, 2]) #initialize later
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
 
-
+        '''Attitude'''
         self.lat = 0
         self.lon = 0
         self.alt = 0
@@ -38,24 +39,32 @@ class AUVModule(mp_module.MPModule):
         self.vz = 0
         self.hdg = 0
 
+        '''Battery information'''
         self.battery_level = -1
         self.voltage_level = -1
         self.current_battery = -1
 
+        '''Pressure and Depth Sensors'''
         self.pressure_sensor = [0] * 3
         self.depth_sensor = [0] * 3
+
 
         self.last_waypoint = None
 
         self.motor_event_complete = None
         self.motor_event_enabled = False
+
+        '''Instances of other modules'''
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
+        self.sensor_reader = SerialReader.SerialReader()
+
+        ''' Commands for operating the module from the MAVProxy CLI'''
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence', 'dense'])
         self.add_command('move', self.cmd_move, "Movement", ['<x|y|z|roll|yaw>', 'pwm', 'seconds'])
         self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
-        self.sensor_reader = SerialReader.SerialReader()
+
 
     def usage(self):
         '''show help on command line options'''
@@ -279,7 +288,8 @@ class AUVModule(mp_module.MPModule):
                                     #  self.distance_to_waypoint, heading)
 
             #self.surface()
-            #time.sleep(80)
+        # else:
+        #     sleep(120)
 
         numpy.savetxt('pollution_array.txt', self.pollution_array)
         return
@@ -391,6 +401,7 @@ class AUVModule(mp_module.MPModule):
         previous_direction += 180
         self.orient_heading(previous_direction)
         self.traverse(sideways_distance/2)
+        self.orient_heading(heading)
 
         return forward_travel_distance
 
@@ -409,7 +420,7 @@ class AUVModule(mp_module.MPModule):
                 start_time = int(time.time())
                 self.xy[direction] += sign
                 self.sample(channel)
-                time.sleep(60 - (int(time.time()) - start_time) % 60)
+                time.sleep(1 - (int(time.time()) - start_time) % 1)
             else:
                 self.xy['x'] = len(self.pollution_array)
             if direction == 'y':
@@ -418,7 +429,7 @@ class AUVModule(mp_module.MPModule):
                 start_time = int(time.time())
                 self.xy[direction] -= sign
                 self.sample(channel)
-                time.sleep(60 - (int(time.time()) - start_time) % 60)
+                time.sleep(1 - (int(time.time()) - start_time) % 1)
 
 
     # args = [direction, pwm, seconds]
@@ -427,7 +438,6 @@ class AUVModule(mp_module.MPModule):
     # yaw - 4
     # forward - 5
     # lateral - 6
-    # source: https://github.com/bluerobotics/ardusub/blob/master/libraries/AP_RCMapper/AP_RCMapper.cpp
     def cmd_move(self, args):
         if len(args) != 3:
             return "Usage: move <f|l|z|roll|yaw> pwm seconds"
