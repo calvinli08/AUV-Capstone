@@ -7,6 +7,7 @@ from pymavlink import mavutil
 import errno
 import time
 import numpy
+import Queue
 
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
@@ -51,9 +52,12 @@ class AUVModule(mp_module.MPModule):
 
         self.last_waypoint = None
 
-        self.motor_event_complete = None
-        self.motor_event_enabled = False
-
+	'''Infinite sized queue for motor commands'''
+        self.command_queue = Queue.Queue(-1)
+	self.mission_running = False
+	self.end_time = 0
+	
+	
         '''Instances of other modules'''
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
         self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
@@ -129,7 +133,7 @@ class AUVModule(mp_module.MPModule):
         f = open('/home/pi/motor_battery.txt', 'w')
         f.write("%s, %s, %s, x before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
-        self.cmd_move(['x', 1550, 1])
+        #self.cmd_move(['x', 1550])
 
         f.write("%s, %s, %s, x after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -137,7 +141,7 @@ class AUVModule(mp_module.MPModule):
         f.write("%s, %s, %s, x_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
         '''move backward for 3 seconds'''
-        self.cmd_move(['x', 1450, 1])
+        #self.cmd_move(['x', 1450])
 
         f.write("%s, %s, %s, x_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -150,14 +154,14 @@ class AUVModule(mp_module.MPModule):
         f = open('/home/pi/motor_battery.txt', 'w')
         f.write("%s, %s, %s, y before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
-        self.cmd_move(['y', 1550, 1])
+        #self.cmd_move(['y', 1550])
 
         f.write("%s, %s, %s, y after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
         f.write("%s, %s, %s, y_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
         '''strafe right for 3 seconds'''
-        self.cmd_move(['y', 1450, 1])
+        #self.cmd_move(['y', 1450, 1])
 
         f.write("%s, %s, %s, y_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -170,7 +174,7 @@ class AUVModule(mp_module.MPModule):
         f = open('/home/pi/motor_battery.txt', 'w')
         f.write("%s, %s, %s, roll before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
-        self.cmd_move(["roll", 1550, 1])
+        #self.cmd_move(["roll", 1550, 1])
 
         f.write("%s, %s, %s, roll after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -178,7 +182,7 @@ class AUVModule(mp_module.MPModule):
 
 
         '''roll ccw for 3 seconds'''
-        self.cmd_move(["roll", 1450, 1])
+        #self.cmd_move(["roll", 1450, 1])
 
         f.write("%s, %s, %s, roll_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
         f.close()
@@ -190,7 +194,7 @@ class AUVModule(mp_module.MPModule):
         f = open('/home/pi/motor_battery.txt', 'w')
         f.write("%s, %s, %s, yaw before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
-        self.cmd_move(["yaw", 1550, 1])
+        # self.cmd_move(["yaw", 1550, 1])
 
         f.write("%s, %s, %s, yaw after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -199,7 +203,7 @@ class AUVModule(mp_module.MPModule):
 
 
         '''turn right for 3 seconds'''
-        self.cmd_move(["yaw", 1450, 1])
+        #self.cmd_move(["yaw", 1450, 1])
 
         f.write("%s, %s, %s, yaw_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
         f.close()
@@ -231,10 +235,10 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test6(self):
         '''sensor polling'''
-        self.cmd_move(['x',1550,3])
-        self.cmd_move(["yaw",1550,2])
-        self.cmd_move(['x',1550,5])
-        self.cmd_move(["yaw",1550,5])
+        #self.cmd_move(['x',1550,3])
+        #self.cmd_move(["yaw",1550,2])
+        #self.cmd_move(['x',1550,5])
+        #self.cmd_move(["yaw",1550,5])
 
     '''unit test delete later '''
     def test7(self):
@@ -314,12 +318,16 @@ class AUVModule(mp_module.MPModule):
         self.fence_manager.cmd_fence(['load',filename])
 
     def orient_heading(self, offset_from_intended_heading):
+        previous_heading = self.hdg/100
         while abs(offset_from_intended_heading) > 5:
+            print self.hdg/100	
             if offset_from_intended_heading > 0:
-                self.cmd_move(['yaw', 1600, 3])
+                self.cmd_move(['yaw', 1400, 2])
+                offset_from_intended_heading -= (self.hdg/100 - previous_heading)
                 print("orienting!")
             else:
-                self.cmd_move(['yaw', 1400, 3])
+                self.cmd_move(['yaw', 1600, 2])
+                offset_from_intended_heading -= (self.hdg/100 - previous_heading)
                 print("otherwise!")
         else:
             print("done orienting!")
@@ -336,8 +344,9 @@ class AUVModule(mp_module.MPModule):
     # traverse
     # assuming: one second = one meter
     def traverse(self, time = 3):
-        self.cmd_move(['f', 1600, time])
-        print "traversing!"
+        #self.cmd_move(['f', 1600, time])
+        self.command_queue.put(['f',1600,time])
+	print "traversing!"
         return
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
@@ -370,7 +379,7 @@ class AUVModule(mp_module.MPModule):
     '''test with default values, delete later'''
     #dense traverse function that is called when pollution is above a threshold
     def dense_traverse(self, channel = 1, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
-
+	self.mission_running = True
         print "ONE"
         if forward_distance_to_edge < forward_travel_distance:
             forward_travel_distance = forward_distance_to_edge - 2
@@ -402,17 +411,11 @@ class AUVModule(mp_module.MPModule):
         self.orient_heading(previous_direction)
         self.traverse(sideways_distance/2)
         self.orient_heading(heading)
+	self.mission_running = False
 
         return forward_travel_distance
 
-    def wait_motor(self, seconds):
-        self.motor_event_complete = motor_event(seconds)
-        while self.motor_event_complete.trigger() is False:
-            start_time = int(time.time())
-            print("Waiting")
-            time.sleep(0.5 - (int(time.time()) - start_time) % 0.5)
-        self.stop_motor()
-
+    
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
             sign = numpy.sign(pwm - 1500)
@@ -439,35 +442,34 @@ class AUVModule(mp_module.MPModule):
     # forward - 5
     # lateral - 6
     def cmd_move(self, args):
-        if len(args) != 3:
-            return "Usage: move <f|l|z|roll|yaw> pwm seconds"
+        if len(args) != 2:
+            return "Usage: move <f|l|z|roll|yaw> pwm"
         elif args[0] == "f":
             self.rc_manager.override[4] = int(args[1])
             self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            self.track_xy(int(args[1]), 'x')
+            
             return
         elif args[0] == "l":
             # This is how the joystick module does it
             self.rc_manager.override[5] = int(args[1])
             self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            self.track_xy(int(args[1]), 'y')
+            #self.wait_motor(int(args[2]))
+            #self.track_xy(int(args[1]), 'y')
             return
         elif args[0] == "z":
             self.rc_manager.override[1] = int(args[1])
             self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
+            #self.wait_motor(int(args[2]))
             return
         elif args[0] == "roll":
             self.rc_manager.override[2] = int(args[1])
             self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
+            #self.wait_motor(int(args[2]))
             return
         elif args[0] == "yaw":
             self.rc_manager.override[3] = int(args[1])
             self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
+            #self.wait_motor(int(args[2]))
             return
         else:
             return "Usage: move <f|l|z|roll|yaw> pwm seconds"
@@ -492,7 +494,16 @@ class AUVModule(mp_module.MPModule):
                 self.rc_manager.send_rc_override()
                 if self.rc_manager.override_counter > 0:
                     self.rc_manager.override_counter -= 1
-        self.sample(channel)
+        if self.mission_running == True:
+	    if self.end_time <= time.time():
+	        self.stop_motor()
+	        if self.command_queue.empty() == False:
+	            command = self.command_queue.get()
+		    self.cmd_move([str(command[0]),command[1]])
+		    self.end_time = time.time() + command[2]
+	        else:
+	            self.end_time = time.time() + 1         
+	self.sample(channel)
 
 
     def psensor_update(self, SCALED_PRESSURE2):
