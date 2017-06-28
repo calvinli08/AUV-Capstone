@@ -15,6 +15,7 @@ from MAVProxy.modules.mavproxy_auto import mp_waypoint
 from MAVProxy.modules.mavproxy_auto import mp_rc
 from MAVProxy.modules.mavproxy_auto import mp_fence
 from MAVProxy.modules.mavproxy_auto import SerialReader
+from MAVProxy.modules.mavproxy_auto import mavproxy_motors
 
 
 class AUVModule(mp_module.MPModule):
@@ -56,9 +57,9 @@ class AUVModule(mp_module.MPModule):
 
         '''Instances of other modules'''
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
-        self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system,self.target_component,self.console)
         self.sensor_reader = SerialReader.SerialReader()
+        self.motor_module = mavproxy_motors.MotorsModule(mpstate)
 
         ''' Commands for operating the module from the MAVProxy CLI'''
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence', 'dense'])
@@ -85,8 +86,13 @@ class AUVModule(mp_module.MPModule):
             print self.cmd_unittest(args[1:])
         elif args[0] == "dense":
             self.dense_traverse()
+        elif args[0] == "add":
+            self.add_event([str(args[1]), int(args[2]), int(args[3])])
         else:
             print self.usage()
+
+    def add_event(self, args):
+        self.motor_module.add_event(args[0], args[1], args[2])
 
     def cmd_surface(self):
         '''Generate waypoints'''
@@ -311,34 +317,7 @@ class AUVModule(mp_module.MPModule):
         return ( min(distance_between_points), max(distance_between_points) ) #width, length
 
     def load_geofence_points(self, filename):
-        self.fence_manager.cmd_fence(['load',filename])
-
-    def orient_heading(self, offset_from_intended_heading):
-        while abs(offset_from_intended_heading) > 5:
-            if offset_from_intended_heading > 0:
-                self.cmd_move(['yaw', 1600, 3])
-                print("orienting!")
-            else:
-                self.cmd_move(['yaw', 1400, 3])
-                print("otherwise!")
-        else:
-            print("done orienting!")
-            return
-
-    def surface(self, time = 3):
-        self.cmd_move(['z', 1600, time])
-        return
-
-    def dive(self, time = 3):
-        self.cmd_move(['z', 1400, time])
-        return
-
-    # traverse
-    # assuming: one second = one meter
-    def traverse(self, time = 3):
-        self.cmd_move(['f', 1600, time])
-        print "traversing!"
-        return
+        self.fence_manager.cmd_fence(['load', filename])
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self, channel = 1):
@@ -405,14 +384,6 @@ class AUVModule(mp_module.MPModule):
 
         return forward_travel_distance
 
-    def wait_motor(self, seconds):
-        self.motor_event_complete = motor_event(seconds)
-        while self.motor_event_complete.trigger() is False:
-            start_time = int(time.time())
-            print("Waiting")
-            time.sleep(0.5 - (int(time.time()) - start_time) % 0.5)
-        self.stop_motor()
-
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
             sign = numpy.sign(pwm - 1500)
@@ -431,50 +402,6 @@ class AUVModule(mp_module.MPModule):
                 self.sample(channel)
                 time.sleep(1 - (int(time.time()) - start_time) % 1)
 
-
-    # args = [direction, pwm, seconds]
-    # roll - 3
-    # z - 2
-    # yaw - 4
-    # forward - 5
-    # lateral - 6
-    def cmd_move(self, args):
-        if len(args) != 3:
-            return "Usage: move <f|l|z|roll|yaw> pwm seconds"
-        elif args[0] == "f":
-            self.rc_manager.override[4] = int(args[1])
-            self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            self.track_xy(int(args[1]), 'x')
-            return
-        elif args[0] == "l":
-            # This is how the joystick module does it
-            self.rc_manager.override[5] = int(args[1])
-            self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            self.track_xy(int(args[1]), 'y')
-            return
-        elif args[0] == "z":
-            self.rc_manager.override[1] = int(args[1])
-            self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            return
-        elif args[0] == "roll":
-            self.rc_manager.override[2] = int(args[1])
-            self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            return
-        elif args[0] == "yaw":
-            self.rc_manager.override[3] = int(args[1])
-            self.rc_manager.send_rc_override()
-            self.wait_motor(int(args[2]))
-            return
-        else:
-            return "Usage: move <f|l|z|roll|yaw> pwm seconds"
-
-    def stop_motor(self):
-        args = ["all", "1500"]
-        self.rc_manager.cmd_rc(args)
 
     def idle_task(self):
         '''handle missing waypoints'''
@@ -646,31 +573,6 @@ class AUVModule(mp_module.MPModule):
                 self.console.set_status('Fence', 'FEN', row=0, fg='green')
             elif self.fence_manager.enabled == True and self.fence_manager.healthy == False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
-
-
-class motor_event(object):
-    '''a class for fixed frequency events'''
-    def __init__(self, seconds):
-        self.seconds = seconds
-        self.curr_time = time.time()
-        self.final_time = self.curr_time + seconds
-
-    def force(self):
-        '''force immediate triggering'''
-        self.curr_time = 0
-
-    def trigger(self):
-        ''' True if we should trigger now'''
-        tnow = time.time()
-
-        if tnow < self.curr_time:
-            print("Warning, time moved backwards. Restarting timer.")
-            tnow = self.curr_time
-
-        if tnow >= self.final_time:
-            self.last_time = tnow
-            return True
-        return False
 
 
 def init(mpstate):
