@@ -3,7 +3,7 @@
 import os
 import os.path
 import sys
-from pymavlink import mavutil
+from pymavlink import mavutil as mav
 import errno
 import time
 import numpy
@@ -94,9 +94,6 @@ class AUVModule(mp_module.MPModule):
             self.add_event([str(args[1]), int(args[2]), int(args[3])])
         else:
             print self.usage()
-
-    def add_event(self, args):
-        self.motor_module.add_event(args[0], args[1], args[2])
 
     def cmd_surface(self):
         '''Generate waypoints'''
@@ -270,6 +267,7 @@ class AUVModule(mp_module.MPModule):
 
     def run(self):
         while self.next_wp:
+            self.motor_running = True
             mav.set_mode_manual()
             rc.set_mode_manual()
             mav.motors_armed_wait()
@@ -283,7 +281,7 @@ class AUVModule(mp_module.MPModule):
                                                              self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
             self.offset_from_intended_heading = mp_util.gps_bearing(self.lat, self.lon,
-                                                        self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+                                                                    self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
             self.orient_heading(self.offset_from_intended_heading)
 
@@ -302,6 +300,7 @@ class AUVModule(mp_module.MPModule):
         #     sleep(120)
 
         numpy.savetxt('pollution_array.txt', self.pollution_array)
+        self.mission_running = False
         return
 
     def cmd_geofence(self, args):
@@ -328,11 +327,11 @@ class AUVModule(mp_module.MPModule):
         while abs(offset_from_intended_heading) > 5:
             print self.hdg/100
             if offset_from_intended_heading > 0:
-                self.cmd_move(['yaw', 1400, 2])
+                self.command_queue.put(['yaw', 1400, 2])
                 offset_from_intended_heading -= (self.hdg/100 - previous_heading)
                 print("orienting!")
             else:
-                self.cmd_move(['yaw', 1600, 2])
+                self.command_queue.put(['yaw', 1600, 2])
                 offset_from_intended_heading -= (self.hdg/100 - previous_heading)
                 print("otherwise!")
         else:
@@ -340,18 +339,18 @@ class AUVModule(mp_module.MPModule):
             return
 
     def surface(self, time = 3):
-        self.cmd_move(['z', 1600, time])
+        self.command_queue.put(['z', 1600, time])
         return
 
     def dive(self, time = 3):
-        self.cmd_move(['z', 1400, time])
+        self.command_queue.put(['z', 1400, time])
         return
 
     # traverse
     # assuming: one second = one meter
     def traverse(self, time = 3):
         #self.cmd_move(['f', 1600, time])
-        self.command_queue.put(['f',1600,time])
+        self.command_queue.put(['f', 1600, time])
         print "traversing!"
         return
 
@@ -367,6 +366,7 @@ class AUVModule(mp_module.MPModule):
 
     # underwater sparse traverse function
     def underwater_traverse(self, start, end, distance, heading, current = 1):
+        self.mission_running = True
         start_time = int(time.time())
         end_time = int(time.time()) + distance + 1 #seconds
         '''Measure the run times and order of how this code segment runs'''
@@ -498,15 +498,15 @@ class AUVModule(mp_module.MPModule):
                 if self.rc_manager.override_counter > 0:
                     self.rc_manager.override_counter -= 1
         if self.mission_running == True:
-	    if self.end_time <= time.time():
-	        self.stop_motor()
-	        if self.command_queue.empty() == False:
-	            command = self.command_queue.get()
-		    self.cmd_move([str(command[0]),command[1]])
-		    self.end_time = time.time() + command[2]
-	        else:
-	            self.end_time = time.time() + 1
-	self.sample(channel)
+            if self.end_time <= time.time():
+                self.stop_motor()
+                if self.command_queue.empty() == False:
+                    command = self.command_queue.get()
+                    self.cmd_move([str(command[0]), int(command[1])])
+                    self.end_time = time.time() + command[2]
+                else:
+                    self.end_time = time.time() + 1
+        self.sample(channel)
 
 
     def psensor_update(self, SCALED_PRESSURE2):
