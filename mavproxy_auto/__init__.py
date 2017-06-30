@@ -332,7 +332,7 @@ class AUVModule(mp_module.MPModule):
                 print("orienting!")
             else:
                 self.command_queue.put(['yaw', 1600, 2])
-                offset_from_intended_heading -= (self.hdg/100 - previous_heading)
+                offset_from_intended_heading += abs(previous_heading - self.hdg/100)
                 print("otherwise!")
         else:
             print("done orienting!")
