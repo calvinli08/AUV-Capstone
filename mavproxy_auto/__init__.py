@@ -140,7 +140,6 @@ class AUVModule(mp_module.MPModule):
     '''unit test delete later '''
     def test1(self):
         '''xmotor test'''
-        f = open('/home/pi/motor_battery.txt', 'a+')
 
         '''move foward for 3 seconds'''
         self.command_queue.put(['f', 1650, 3])
@@ -148,7 +147,6 @@ class AUVModule(mp_module.MPModule):
         '''move backward for 3 seconds'''
         self.command_queue.put(['f', 1450, 3])
 
-        f.close()
 
     def cmd_underwater(self, args):
         if args[0] == "start":
