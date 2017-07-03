@@ -6,16 +6,18 @@ import sys
 from pymavlink import mavutil
 import errno
 import time
+import threading
 import numpy
 import Queue
+
 from math import sqrt, pow
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
-from MAVProxy.modules.mavproxy_auto import mp_waypoint
-from MAVProxy.modules.mavproxy_auto import mp_rc
-from MAVProxy.modules.mavproxy_auto import mp_fence
-from MAVProxy.modules.mavproxy_auto import SerialReader
+from MAVProxy.modules import mp_waypoint
+from MAVProxy.modules import mp_rc
+from MAVProxy.modules import mp_fence
+from MAVProxy.modules import SerialReader
 
 
 class AUVModule(mp_module.MPModule):
@@ -58,7 +60,6 @@ class AUVModule(mp_module.MPModule):
         self.mission_running = False
         self.end_time = 0
 
-
         self.sample_interval = 2
         self.last_sample = time.time()
 
@@ -73,8 +74,8 @@ class AUVModule(mp_module.MPModule):
         self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence', 'dense'])
-        self.add_command('move', self.cmd_move, "Movement", ['<x|y|z|roll|yaw>', 'pwm', 'seconds'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface','underwater','setfence',])
+        self.add_command('dense', self.cmd_dense, "dense traversal", ['forward_increment', 'yaw_pwm'])
         self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
 
 
@@ -95,10 +96,16 @@ class AUVModule(mp_module.MPModule):
             print self.cmd_geofence(args[1:])
         elif args[0] == "test":
             print self.cmd_unittest(args[1:])
-        elif args[0] == "dense":
-            self.dense_traverse()
         else:
             print self.usage()
+
+    def cmd_dense(self, args):
+        if len(args) == 0:
+            return "Usage: dense forward_increment yaw_pwm"
+        elif len(args) == 2:
+            self.dense_traverse(int(args[0]), int(args[1]))
+        else:
+            return "Usage: dense forward_increment yaw_pwm"
 
     def cmd_surface(self):
         '''Generate waypoints'''
@@ -140,10 +147,10 @@ class AUVModule(mp_module.MPModule):
     def test1(self):
         '''xmotor test'''
         '''move foward for 3 seconds'''
-        f = open('/home/pi/motor_battery.txt', 'w')
+        f = open('/home/pi/motor_battery.txt', 'a')
         f.write("%s, %s, %s, x before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
-        #self.cmd_move(['x', 1550])
+        self.command_queue.put(['f', 1650, 3])
 
         f.write("%s, %s, %s, x after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -151,7 +158,7 @@ class AUVModule(mp_module.MPModule):
         f.write("%s, %s, %s, x_rev before \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
         '''move backward for 3 seconds'''
-        #self.cmd_move(['x', 1450])
+        self.command_queue.put(['f', 1450, 3])
 
         f.write("%s, %s, %s, x_rev after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
 
@@ -279,15 +286,6 @@ class AUVModule(mp_module.MPModule):
         else:
             return "Usage: auto underwater start"
 
-    def t_orient(self, heading):
-        offset = heading - (self.hdg)/100
-        print (offset)
-        if(offset > 0):
-            self.command_queue.put(["yaw",1650,offset/40])
-        else:
-            self.command_queue.put(["yaw",1350,abs(offset)/40])
-        return
-
     def run(self):
         while self.next_wp:
             mav.set_mode_manual()
@@ -343,23 +341,16 @@ class AUVModule(mp_module.MPModule):
     def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load',filename])
 
-    def orient_heading(self, offset_from_intended_heading):
-        previous_heading = self.hdg/100
-        while abs(offset_from_intended_heading) > 5:
-            print self.hdg/100
-            if offset_from_intended_heading > 0:
-                self.command_queue.put(['yaw', 1400, 2])
-                offset_from_intended_heading -= (self.hdg/100 - previous_heading)
-                print self.hdg/100
-                print("orienting!")
-            else:
-                self.command_queue.put(['yaw', 1600, 2])
-                print self.hdg/100
-                offset_from_intended_heading += abs(previous_heading - self.hdg/100)
-                print("otherwise!")
+    def orient_heading(self, offset_from_intended_heading, pwm):
+        diff = abs(pwm - 1500)
+        ccw_pwm = 1500 - diff
+        cw_pwm = 1500 + diff
+        if offset_from_intended_heading > 0:
+            self.command_queue.put(['yaw', ccw_pwm, 2])
+            print("orienting!")
         else:
-            print("done orienting!")
-            return
+            self.command_queue.put(['yaw', cw_pwm, 2])
+            print("otherwise!")
 
     def surface(self, time = 3):
         self.cmd_move(['z', 1600, time])
@@ -373,30 +364,27 @@ class AUVModule(mp_module.MPModule):
     # assuming: one second = one meter
     def traverse(self, time = 3):
         #self.cmd_move(['f', 1600, time])
-        self.command_queue.put(['f',1600,time])
+        self.command_queue.put(['f', 1600, time])
         print "traversing!"
         return
-
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self):
         f = open('/home/pi/sensordata.txt', 'a+')
         do_read = self.sensor_reader.read("2").rstrip()
         cond_read = self.sensor_reader.read("3").rstrip()
-
-        f.write(r"DO: %s, Cond: %s, Temp: %s, Lat %s, Long %s " % (do_read, cond_read, self.temp_sensor[2],self.lat,self.lon) + time.strftime("%H:%M:%S")+"\n")
-        #f.write(time.strftime("%H:%M:%S") + "\n")
+        batt_usage = self.current_battery/10 * self.batt_interval
+        f.write(r"DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s mA: %s" % (do_read, cond_read, self.temp_sensor[2], self.lat, self.lon, batt_usage) + time.strftime("%H:%M:%S") + "\n")
         #pollution_value = self.sensor_reader.read(channel)
         #pollution_array[self.xy['x']][self.xy['y']] = pollution_value
         #f.write("%s, %s, %s, after \n" % (str(self.battery_update[0]), str(self.battery_update[1]), str(self.battery_update[2])))
-        #f.close()
         f.close()
         return
 
     def batt_info(self):
         f = open('/home/pi/batterydata.txt', 'a+')
         batt_usage = self.current_battery/10 * self.batt_interval
-        f.write(r"%s mA per meter" % (batt_usage) + time.strftime("%H:%M:%S")+"\n")
+        f.write("%s mA per meter " % (batt_usage) + time.strftime("%H:%M:%S")+"\n")
         #f.write(time.strftime("%H:%M:%S") + "\n")
         #pollution_value = self.sensor_reader.read(channel)
         #pollution_array[self.xy['x']][self.xy['y']] = pollution_value
@@ -424,7 +412,7 @@ class AUVModule(mp_module.MPModule):
 
     '''test with default values, delete later'''
     #dense traverse function that is called when pollution is above a threshold
-    def dense_traverse(self, channel = 1, forward_distance_to_edge = 10, loop_number = 3, heading = 0, forward_travel_distance = 5, sideways_distance = 2, current = 0):
+    def dense_traverse(self, forward_increment = 3, pwm = 1650, channel = 1, forward_distance_to_edge = 10, loop_number = 3, forward_travel_distance = 5, sideways_distance = 4, current = 0):
 
         print "ONE"
         if forward_distance_to_edge < forward_travel_distance:
@@ -434,33 +422,29 @@ class AUVModule(mp_module.MPModule):
 
         print "TWO"
         start_time = int(time.time())
-        left_direction = heading - 90
-        right_direction = heading + 90
 
-        self.orient_heading(right_direction)
+        self.orient_heading(90, pwm)
         print "THREE"
-        previous_direction = right_direction
         self.traverse(sideways_distance)
         print "FOUR"
 
+        turn_direction = -90
         for j in xrange(forward_travel_distance):
-            self.orient_heading(heading)
-            self.traverse(3)
+            self.orient_heading(turn_direction, pwm)
+            self.traverse(forward_increment)
             print "FIVE"
-            previous_direction += 180
-            self.orient_heading(previous_direction)
+            self.orient_heading(turn_direction, pwm)
             self.traverse(sideways_distance)
+            turn_direction *= -1
 
-        self.orient_heading(heading)
+        self.orient_heading(turn_direction, pwm)
         self.traverse(3)
-        previous_direction += 180
-        self.orient_heading(previous_direction)
+        self.orient_heading(turn_direction, pwm)
         self.traverse(sideways_distance/2)
-        self.orient_heading(heading)
-        self.mission_running = False
+        turn_direction *= -1
+        self.orient_heading(turn_direction, pwm)
 
         return forward_travel_distance
-
 
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
@@ -734,6 +718,45 @@ class motor_event(object):
             self.last_time = tnow
             return True
         return False
+
+class orient_thread(threading.Thread):
+    def __init__(self, threadID, name, counter):
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+
+    def run(self):
+        orient_heading(self.name, self.counter, 3)
+
+def orient_heading(thread_name, counter, delay = 3):
+    previous_heading = self.hdg/100
+    while abs(offset_from_intended_heading) > 5:
+        print self.hdg/100
+        if offset_from_intended_heading > 0:
+            self.command_queue.put(['yaw', 1400, 2])
+            time.sleep(delay)
+            offset_from_intended_heading -= (self.hdg/100 - previous_heading)
+            print("orienting!")
+        else:
+            self.command_queue.put(['yaw', 1600, 2])
+            time.sleep(delay)
+            offset_from_intended_heading += abs(previous_heading - self.hdg/100)
+            print("otherwise!")
+    else:
+        print("done orienting!")
+        return
+
+class gps_thread(threading.Thread):
+    def __init__(self, threadID, name, counter):
+        self.threadID = threadID
+        self.name = name
+        self.counter = counter
+
+    def run(self):
+
+def gps_update(thread_name, counter, m, delay = 3):
+    mtype = m.get_type()
+    if mtype == 'GLOBAL_POSITION_INT':
 
 
 def init(mpstate):
