@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
     MAVProxy geofence module
 """
@@ -31,7 +32,7 @@ class FenceManager():
 
         self.menu_added_console = False
         self.menu_added_map = False
-       
+
 
     def set_fence_enabled(self, do_enable):
         '''Enable or disable fence'''
@@ -237,5 +238,3 @@ class FenceManager():
 
     def print_usage(self):
         print("usage: fence <enable|disable|list|load|save|clear|draw|move|remove>")
-
-   

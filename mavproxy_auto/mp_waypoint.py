@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 '''waypoint command handling'''
 
 import time, os, fnmatch, copy, platform

@@ -47,7 +47,7 @@ class AUVModule(mp_module.MPModule):
         self.voltage_level = -1
         self.current_battery = -1
         self.last_batt = time.time()
-        self.joules = 0
+        self.ujoules = 0
 
         '''Pressure and Depth Sensors'''
         self.temp_sensor = [0] * 3
@@ -70,7 +70,7 @@ class AUVModule(mp_module.MPModule):
         self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['surface', 'underwater', 'setfence'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test','surface', 'underwater', 'setfence'])
         self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
         self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
 
@@ -147,7 +147,6 @@ class AUVModule(mp_module.MPModule):
         '''move backward for 3 seconds'''
         self.command_queue.put(['f', 1450, 3])
 
-
     def cmd_underwater(self, args):
         if args[0] == "start":
             self.run()
@@ -209,7 +208,7 @@ class AUVModule(mp_module.MPModule):
     def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load', filename])
 
-    def orient_heading(self, offset_from_intended_heading, pwm):
+    def orient_heading(self, offset_from_intended_heading, pwm=1550):
         diff = abs(pwm - 1500)
         ccw_pwm = 1500 - diff
         cw_pwm = 1500 + diff
@@ -220,7 +219,7 @@ class AUVModule(mp_module.MPModule):
             self.command_queue.put(['yaw', cw_pwm, 2])
             print("otherwise!")
 
-    def surface(self, time=3):
+    def surface(self, time=5):
         self.command_queue.put(['z', 1600, time])
         return
 
@@ -238,12 +237,12 @@ class AUVModule(mp_module.MPModule):
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self):
         with open("/home/pi/sensor_battery.txt", "a+") as f:
-            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, Watts: %s, Time: " % (self.sensor_reader.read("2").rstrip(), self.sensor_reader.read("3").rstrip(), self.temp_sensor[2], self.lat, self.lon, self.batt_info()) + time.strftime("%H:%M:%S") + "\n")  # DO, Conductivity, Temperature, Lat, Lng, Watts
+            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: " % (self.sensor_reader.read("2").rstrip(), self.sensor_reader.read("3").rstrip(), self.temp_sensor[2], self.lat, self.lon, self.batt_info()) + time.strftime("%H:%M:%S") + "\n")  # DO, Conductivity, Temperature, Lat, Lng, microWatts
         # pollution_array[self.xy['x']][self.xy['y']] = pollution_value
         return
 
     def batt_info(self):
-        return float(self.current_battery/10000) * float(self.voltage_level/1000)  # watts
+        return float(self.current_battery) * float(self.voltage_level)  # micro-watts
 
     # underwater sparse traverse function
     def underwater_traverse(self, start, end, distance, heading, current=1):
@@ -401,8 +400,8 @@ class AUVModule(mp_module.MPModule):
                     self.rc_manager.override_counter -= 1
         if self.end_time <= time.time():
             self.stop_motor()
-            with open("/home/pi/battery_motor.txt", "a+") as f:
-                f.write("Joules: %s, Run time: %s, Time: " % (self.joules, self.motor_run_time) + time.strftime("%H:%M:%S") + "\n")
+            with open("/home/pi/motor_battery.txt", "a+") as f:
+                f.write("uJoules: %s, Run time: %s, Time: " % (self.ujoules, self.motor_run_time) + time.strftime("%H:%M:%S") + "\n")
             self.joules = 0
             if self.command_queue.empty() is False:
                 command = self.command_queue.get()
@@ -413,7 +412,7 @@ class AUVModule(mp_module.MPModule):
                 self.end_time = time.time() + 1
         elif now - self.last_batt >= 1:
             self.last_batt = now
-            self.joules += self.batt_info()
+            self.ujoules += self.batt_info()
         if now - self.last_sample > 1:
             self.last_sample = now
             self.sample()
