@@ -70,13 +70,12 @@ class AUVModule(mp_module.MPModule):
         self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test','surface', 'underwater', 'setfence'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test', 'surface', 'underwater', 'setfence'])
         self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
-        self.add_command('unittest', self.cmd_unittest, "unit tests", ['<1|2|3|4|5|6|7>'])
 
     def usage(self):
         '''show help on command line options'''
-        return "Usage: auto <dense|setfence|surface|underwater>"
+        return "Usage: auto <test|setfence|surface|underwater>"
 
     def cmd_auto(self, args):
         '''control behaviour of the module'''
@@ -90,7 +89,7 @@ class AUVModule(mp_module.MPModule):
         elif args[0] == "setfence":
             print self.cmd_geofence(args[1:])
         elif args[0] == "test":
-            print self.cmd_unittest(args[1:])
+            print self.test1()
         else:
             print self.usage()
 
@@ -115,28 +114,6 @@ class AUVModule(mp_module.MPModule):
         args = ["load", "testfile.txt"]
         self.wp_manager.cmd_wp(args)
 
-    def cmd_unittest(self, args):
-        if len(args) == 0:
-            print self.usage()
-        elif args[0] == "1":
-            self.test1()
-        elif args[0] == "2":
-            self.test2()
-        elif args[0] == "3":
-            self.test3()
-        elif args[0] == "4":
-            self.test4()
-        elif args[0] == "5":
-            self.test5()
-        elif args[0] == "6":
-            self.test6()
-        elif args[0] == "7":
-            self.test7()
-        elif args[0] == "R":
-            print(self.sensor_reader.read("2"))
-            print(self.sensor_reader.read("3"))
-        return
-
     '''unit test delete later '''
     def test1(self):
         '''xmotor test'''
@@ -155,12 +132,6 @@ class AUVModule(mp_module.MPModule):
 
     def run(self):
         while self.next_wp:
-            mav.set_mode_manual()
-            rc.set_mode_manual()
-            mav.motors_armed_wait()
-            # set the apm mav_type
-            mav.mode_mapping()
-
             if self.predive_check() is not True:
                 return "Insufficient Battery"
 
@@ -244,7 +215,7 @@ class AUVModule(mp_module.MPModule):
     def batt_info(self):
         return float(self.current_battery) * float(self.voltage_level)  # micro-watts
 
-    # underwater sparse traverse function
+    '''underwater sparse traverse function'''
     def underwater_traverse(self, start, end, distance, heading, current=1):
         start_time = int(time.time())
         end_time = int(time.time()) + distance + 1  # seconds
@@ -262,7 +233,7 @@ class AUVModule(mp_module.MPModule):
             return
 
     '''test with default values, delete later'''
-    # dense traverse function that is called when pollution is above a threshold
+    ''' dense traverse function that is called when pollution is above a threshold'''
     def dense_traverse(self, forward_increment=3, pwm=1650, channel=1, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
 
         print "ONE"
