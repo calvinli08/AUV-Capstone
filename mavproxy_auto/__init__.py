@@ -3,21 +3,20 @@
 import os
 import os.path
 import sys
-from pymavlink import mavutil
-import errno
-import time
-import threading
 import numpy
-import Queue
-
+import errno
+from pymavlink import mavutil
+from time import strftime, time
+from collections import deque
 from math import sqrt, pow
+
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
 from MAVProxy.modules import mp_waypoint
 from MAVProxy.modules import mp_rc
 from MAVProxy.modules import mp_fence
-from MAVProxy.modules import SerialReader
+#from MAVProxy.modules import SerialReader
 
 
 class AUVModule(mp_module.MPModule):
@@ -46,8 +45,9 @@ class AUVModule(mp_module.MPModule):
         self.battery_level = -1
         self.voltage_level = -1
         self.current_battery = -1
-        self.last_batt = time.time()
+        self.last_batt = time()
         self.ujoules = 0
+        self.write_to_battery = []
 
         '''Pressure and Depth Sensors'''
         self.temp_sensor = [0] * 3
@@ -56,22 +56,22 @@ class AUVModule(mp_module.MPModule):
         self.last_waypoint = None
 
         '''Infinite sized queue for motor commands'''
-        self.command_queue = Queue.Queue(-1)
-        self.mission_running = False
+        self.command_queue = deque()
         self.end_time = 0
         self.motor_run_time = 0
 
-        self.last_sample = time.time()
+        self.last_sample = time()
 
         '''Instances of other modules'''
         self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
-        self.rc_manager = mp_rc.RCManager(self.master, self.target_system, self.target_component)
         self.fence_manager = mp_fence.FenceManager(self.master, self.target_system, self.target_component, self.console)
-        self.sensor_reader = SerialReader.SerialReader()
+        #self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test', 'surface', 'underwater', 'setfence'])
         self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
+
+        self.mav = mavutil.mavfile(None, None)  # only using set_mode_manual(), so fd and address can be None
 
     def usage(self):
         '''show help on command line options'''
@@ -95,11 +95,11 @@ class AUVModule(mp_module.MPModule):
 
     def cmd_dense(self, args):
         if len(args) == 0:
-            return "Usage: dense start forward_increment yaw_pwm"
+            return "Usage: dense start forward_increment
         elif args[0] == 'start':
-            self.dense_traverse(int(args[1]), int(args[2]))
+            self.dense_traverse(int(args[1]))
         else:
-            return "Usage: dense start forward_increment yaw_pwm"
+            return "Usage: dense forward_increment"
 
     def cmd_surface(self):
         '''Generate waypoints'''
@@ -114,21 +114,21 @@ class AUVModule(mp_module.MPModule):
         args = ["load", "testfile.txt"]
         self.wp_manager.cmd_wp(args)
 
-    '''unit test delete later '''
-    def test1(self):
-        '''xmotor test'''
-
-        '''move foward for 3 seconds'''
-        self.command_queue.put(['f', 1650, 3])
-
-        '''move backward for 3 seconds'''
-        self.command_queue.put(['f', 1450, 3])
-
     def cmd_underwater(self, args):
         if args[0] == "start":
             self.run()
         else:
             return "Usage: auto underwater start"
+
+    '''unit test delete later '''
+    def test1(self):
+        '''xmotor test'''
+
+        '''move foward for 3 seconds'''
+        self.command_queue.append(["f", 1650, 3])
+
+        '''move backward for 3 seconds'''
+        self.command_queue.append(["f", 1450, 3])
 
     def run(self):
         while self.next_wp:
@@ -179,53 +179,53 @@ class AUVModule(mp_module.MPModule):
     def load_geofence_points(self, filename):
         self.fence_manager.cmd_fence(['load', filename])
 
-    def orient_heading(self, offset_from_intended_heading, pwm=1550):
-        diff = abs(pwm - 1500)
-        ccw_pwm = 1500 - diff
-        cw_pwm = 1500 + diff
-        if offset_from_intended_heading > 0:
-            self.command_queue.put(['yaw', ccw_pwm, 2])
-            print("orienting!")
-        else:
-            self.command_queue.put(['yaw', cw_pwm, 2])
-            print("otherwise!")
-
     def surface(self, time=5):
-        self.command_queue.put(['z', 1600, time])
+        self.command_queue.append(["z", 1600, time])
         return
 
     def dive(self, time=3):
-        self.command_queue.put(['z', 1400, time])
+        self.command_queue.append(["z", 1400, time])
         return
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
     def traverse(self, time=3):
-        self.command_queue.put(['f', 1600, time])
+        self.command_queue.append(["f", 1600, time])
         print "traversing!"
         return
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self):
         with open("/home/pi/sensor_battery.txt", "a+") as f:
-            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: " % (self.sensor_reader.read("2").rstrip(), self.sensor_reader.read("3").rstrip(), self.temp_sensor[2], self.lat, self.lon, self.batt_info()) + time.strftime("%H:%M:%S") + "\n")  # DO, Conductivity, Temperature, Lat, Lng, microWatts
+            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (self.sensor_reader.read("2").rstrip(), self.sensor_reader.read("3").rstrip(), self.temp_sensor[2], self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
         # pollution_array[self.xy['x']][self.xy['y']] = pollution_value
         return
 
     def batt_info(self):
         return float(self.current_battery) * float(self.voltage_level)  # micro-watts
 
+    def orient_heading(self, offset_from_intended_heading, pwm=1550):
+        diff = abs(pwm - 1500)
+        ccw_pwm = 1500 - diff
+        cw_pwm = 1500 + diff
+        if offset_from_intended_heading > 0:
+            self.command_queue.append(["yaw", ccw_pwm, 2])
+            print("orienting!")
+        else:
+            self.command_queue.append(["yaw", cw_pwm, 2])
+            print("otherwise!")
+
     '''underwater sparse traverse function'''
     def underwater_traverse(self, start, end, distance, heading, current=1):
-        start_time = int(time.time())
-        end_time = int(time.time()) + distance + 1  # seconds
+        start_time = int(time())
+        end_time = int(time()) + distance + 1  # seconds
         '''Measure the run times and order of how this code segment runs'''
-        while end_time - int(time.time()) >= 0:
+        while end_time - int(time()) >= 0:
             self.traverse()
             if self.sample():
-                elapsed_time = (int(time.time()) - start_time) + start_time
-                remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, channel, end_time - int(time.time()), self.loops, heading, 5, 2, 1) - elapsed_time
-                end_time = int(time.time()) + remaining_distance + 1
+                elapsed_time = (int(time()) - start_time) + start_time
+                remaining_distance = end_time - self.dense_traverse(elapsed_time, elapsed_time+5, channel, end_time - int(time()), self.loops, heading, 5, 2, 1) - elapsed_time
+                end_time = int(time()) + remaining_distance + 1
         else:
             self.stop_motor()
             if distance == 1:
@@ -234,7 +234,7 @@ class AUVModule(mp_module.MPModule):
 
     '''test with default values, delete later'''
     ''' dense traverse function that is called when pollution is above a threshold'''
-    def dense_traverse(self, forward_increment=3, pwm=1650, channel=1, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
+    def dense_traverse(self, forward_increment=3, pwm=1550, channel=1, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
 
         print "ONE"
         if forward_distance_to_edge < forward_travel_distance:
@@ -243,7 +243,7 @@ class AUVModule(mp_module.MPModule):
             sideways_distance = sideways_distance/2
 
         print "TWO"
-        start_time = int(time.time())
+        start_time = int(time())
 
         self.orient_heading(90, pwm)
         print "THREE"
@@ -272,19 +272,19 @@ class AUVModule(mp_module.MPModule):
         if direction in ['x', 'y']:
             sign = numpy.sign(pwm - 1500)
             while self.motor_event_enabled and self.loop % 2 == 0:
-                start_time = int(time.time())
+                start_time = int(time())
                 self.xy[direction] += sign
                 self.sample(channel)
-                time.sleep(1 - (int(time.time()) - start_time) % 1)
+                time.sleep(1 - (int(time()) - start_time) % 1)
             else:
                 self.xy['x'] = len(self.pollution_array)
             if direction == 'y':
                 sign *= -1
             while self.motor_event_enabled and self.loop % 2 == 1:
-                start_time = int(time.time())
+                start_time = int(time())
                 self.xy[direction] -= sign
                 self.sample(channel)
-                time.sleep(1 - (int(time.time()) - start_time) % 1)
+                time.sleep(1 - (int(time()) - start_time) % 1)
 
     # args = [direction, pwm, seconds]
     # roll - 3
@@ -293,39 +293,37 @@ class AUVModule(mp_module.MPModule):
     # forward - 5
     # lateral - 6
     def cmd_move(self, args):
-        if len(args) != 2:
+        if len(args) != 3:
             return "Usage: move <f|l|z|roll|yaw> pwm"
         elif args[0] == "f":
-            print("forward")
-            self.rc_manager.override[4] = int(args[1])
-            self.rc_manager.send_rc_override()
-            # self.track_xy(int(args[1]), 'y')
+            self.module('rc').override[4] = args[1]
+            self.module('rc').send_rc_override()
+            print "forward"
+            # self.track_xy(args[1], 'y')
             return
         elif args[0] == "l":
             # This is how the joystick module does it
-            self.rc_manager.override[5] = int(args[1])
-            self.rc_manager.send_rc_override()
-            # self.track_xy(int(args[1]), 'y')
+            self.module('rc').override[5] = args[1]
+            self.module('rc').send_rc_override()
+            # self.track_xy(args[1], 'y')
             return
         elif args[0] == "z":
-            self.rc_manager.override[1] = int(args[1])
-            self.rc_manager.send_rc_override()
+            self.module('rc').override[1] = args[1]
+            self.module('rc').send_rc_override()
             return
         elif args[0] == "roll":
-            self.rc_manager.override[2] = int(args[1])
-            self.rc_manager.send_rc_override()
+            self.module('rc').override[2] = args[1]
+            self.module('rc').send_rc_override()
             return
         elif args[0] == "yaw":
-            print("yaw")
-            self.rc_manager.override[3] = int(args[1])
-            self.rc_manager.send_rc_override()
+            self.module('rc').override[3] = args[1]
+            self.module('rc').send_rc_override()
             return
         else:
             return "Usage: move <f|l|z|roll|yaw> pwm seconds"
 
     def stop_motor(self):
-        args = ["all", "1500"]
-        self.rc_manager.cmd_rc(args)
+        self.module('rc').stop()
         return
 
     def psensor_update(self, SCALED_PRESSURE3):
@@ -360,33 +358,39 @@ class AUVModule(mp_module.MPModule):
 
     def idle_task(self):
         '''time motor events, track battery usage, and time sensor readings'''
-        now = time.time()
-        if self.rc_manager.override_period.trigger():
-            if (self.rc_manager.override != [1500] * 16 or
-                self.rc_manager.override != self.rc_manager.last_override or
-                self.rc_manager.override_counter > 0):
-                self.rc_manager.last_override = self.rc_manager.override[:]
-                self.rc_manager.send_rc_override()
-                if self.rc_manager.override_counter > 0:
-                    self.rc_manager.override_counter -= 1
-        if self.end_time <= time.time():
-            self.stop_motor()
-            with open("/home/pi/motor_battery.txt", "a+") as f:
-                f.write("uJoules: %s, Run time: %s, Time: " % (self.ujoules, self.motor_run_time) + time.strftime("%H:%M:%S") + "\n")
-            self.joules = 0
-            if self.command_queue.empty() is False:
-                command = self.command_queue.get()
-                self.cmd_move([str(command[0]), command[1]])
-                self.end_time = time.time() + command[2]
-                self.motor_run_time = command[2]
-            else:
-                self.end_time = time.time() + 1
-        elif now - self.last_batt >= 1:
-            self.last_batt = now
+        now = time()
+        if self.module('rc').override_period.trigger():
+            if (self.module('rc').override != [1500] * 16 or
+                self.module('rc').override != self.module('rc').last_override or
+                self.module('rc').override_counter > 0):
+                self.module('rc').last_override = self.module('rc').override[:]
+                self.module('rc').send_rc_override()
+                if self.module('rc').override_counter > 0:
+                    self.module('rc').override_counter -= 1
+        # extremely time critical, as the code must send the next 'rc' cmd before the 3 second disarm timeout
+        if self.end_time <= time():
+            self.module('rc').stop()  # this resets the disarm timer
+            # * Code between asterisks must execute in under 3 seconds to keep auv armed
+            try:
+                command=self.command_queue.popleft()
+                self.cmd_move(command)
+                self.end_time=time() + command[2]
+                self.write_to_battery.append("uJoules: %s, Run time: %s, Time: %s \n" % (self.ujoules, self.motor_run_time, strftime("%H:%M:%S")))
+                self.motor_run_time=command[2]
+                self.ujoules=0
+            # *
+            except IndexError:
+                self.end_time = time() + 1
+                with open("/home/pi/motor_battery.txt", "a+") as f:
+                    f.write(''.join(self.write_to_battery))
+                self.write_to_battery = []
+        if now - self.last_batt >= 1:
+            self.last_batt=now
             self.ujoules += self.batt_info()
         if now - self.last_sample > 1:
-            self.last_sample = now
+            self.last_sample=now
             self.sample()
+        self.mav.set_mode_manual()
 
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
@@ -510,7 +514,7 @@ class motor_event(object):
     '''a class for fixed frequency events'''
     def __init__(self, seconds):
         self.seconds = seconds
-        self.curr_time = time.time()
+        self.curr_time = time()
         self.final_time = self.curr_time + seconds
 
     def force(self):
@@ -519,7 +523,7 @@ class motor_event(object):
 
     def trigger(self):
         ''' True if we should trigger now'''
-        tnow = time.time()
+        tnow = time()
 
         if tnow < self.curr_time:
             print("Warning, time moved backwards. Restarting timer.")
