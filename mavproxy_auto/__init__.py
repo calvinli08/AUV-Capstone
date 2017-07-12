@@ -5,7 +5,7 @@ import os.path
 import sys
 import numpy
 import errno
-from pymavlink import mavutil
+from pymavlink import mavutil, mavwp
 from time import strftime, time
 from collections import deque
 from math import sqrt, pow
@@ -30,6 +30,8 @@ class AUVModule(mp_module.MPModule):
         self.pollution_array = numpy.zeros([2, 2])  # initialize later
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
+        self.dense = False
+        self.start_time = 0
 
         '''Attitude'''
         self.lat = 0
@@ -61,10 +63,6 @@ class AUVModule(mp_module.MPModule):
         self.motor_run_time = 0
 
         self.last_sample = time()
-
-        '''Instances of other modules'''
-        self.wp_manager = mp_waypoint.WPManager(self.master, self.target_system, self.target_component)
-        self.fence_manager = mp_fence.FenceManager(self.master, self.target_system, self.target_component, self.console)
         self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
@@ -72,6 +70,7 @@ class AUVModule(mp_module.MPModule):
         self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
 
         self.mav = mavutil.mavfile(None, None)  # only using set_mode_manual(), so fd and address can be None
+        self.wp_loader = mavwp.MAVWPLoader(self.target_system, self.target_component)
 
     def usage(self):
         '''show help on command line options'''
@@ -101,24 +100,54 @@ class AUVModule(mp_module.MPModule):
         else:
             return "Usage: dense forward_increment"
 
-    def cmd_surface(self):
-        '''Generate waypoints'''
-        '''Toy test'''
-        f = open('testfile.txt', 'w')
-        f.write('QGC WPL 110\n')
-        f.write('0  1   0   16  0.149999999999999994    0   0   0   8.54800000000000004 47.3759999999999977 550 1\n')
-        f.write('1  0   0   16  0.149999999999999994    0   0   0   8.54800000000000004 47.3759999999999977 550 1\n')
-        f.write('2  0   0   16  0.149999999999999994    0   0   0   8.54800000000000004 47.3759999999999977 550 1\n')
-        f.close()
-
-        args = ["load", "testfile.txt"]
-        self.wp_manager.cmd_wp(args)
-
     def cmd_underwater(self, args):
         if args[0] == "start":
+            self.load_geofence_points("/home/pi/waypoints.txt")
             self.run()
         else:
             return "Usage: auto underwater start"
+
+    def cmd_geofence(self, args):
+        return "Not yet implemented"
+
+    def calculate_geofence_edge_lengths(self):
+        '''calculate length of geofence rectangle sides'''
+        f = open('fence.txt', "r")
+        points = []
+        p = []
+        for line in f:
+            p = f.readline().split()
+            points.append([p[0], p[1]])
+        distance_between_points = []
+        for x in range(len(points)-1):
+            distance_between_points.append(mp_util.gps_distance(points[x][0], points[x][1], points[x+1][0], points[x+1][1]))
+        return (min(distance_between_points), max(distance_between_points))  # width, length
+
+    def load_geofence_points(self, filename):
+        self.modules('fence').cmd_fence(['load', filename])
+        self.next_wp = self.wp_loader.wp(0)
+        if self.next_wp is None:
+            print("Waypoint loading unsuccessful. Please check that the waypoint file is populated.\n")
+            self.module('arm').cmd_disarm('force')
+            break
+
+    def track_xy(self, pwm, direction):
+        if direction in ['x', 'y']:
+            sign = numpy.sign(pwm - 1500)
+            while self.motor_event_enabled and self.loop % 2 == 0:
+                start_time = int(time())
+                self.xy[direction] += sign
+                self.sample(channel)
+                time.sleep(1 - (int(time()) - start_time) % 1)
+            else:
+                self.xy['x'] = len(self.pollution_array)
+            if direction == 'y':
+                sign *= -1
+            while self.motor_event_enabled and self.loop % 2 == 1:
+                start_time = int(time())
+                self.xy[direction] -= sign
+                self.sample(channel)
+                time.sleep(1 - (int(time()) - start_time) % 1)
 
     '''unit test delete later '''
     def test1(self):
@@ -136,7 +165,7 @@ class AUVModule(mp_module.MPModule):
             raise ValueError('self.next_wp is None')
         if self.battery >= 60.0:
             return
-        elif 35.0 <= self.battery < 60.0 and (self.battery*time_multiplier - (distance / self.velocity)) > 2:
+        elif 35.0 <= self.battery < 60.0 and  '''run battery voltage tests''' > 2:
             return
         else:
             raise HardwareError([1, 'Insufficient Battery'])
@@ -149,7 +178,7 @@ class AUVModule(mp_module.MPModule):
                                                              self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
             self.offset_from_intended_heading = mp_util.gps_bearing(self.lat, self.lon,
-                                                        sel"yaw"f.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+                                                        self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
 
             self.orient_heading(self.offset_from_intended_heading)
 
@@ -173,43 +202,6 @@ class AUVModule(mp_module.MPModule):
 
         numpy.savetxt('pollution_array.txt', self.pollution_array)
         return
-
-    def cmd_geofence(self, args):
-        return "Not yet implemented"
-
-    def calculate_geofence_edge_lengths(self):
-        '''calculate length of geofence rectangle sides'''
-        f = open('fence.txt', "r")
-        points = []
-        p = []
-        for line in f:
-            p = f.readline().split()
-            points.append([p[0], p[1]])
-        distance_between_points = []
-        for x in range(len(points)-1):
-            distance_between_points.append(mp_util.gps_distance(points[x][0], points[x][1], points[x+1][0], points[x+1][1]))
-        return (min(distance_between_points), max(distance_between_points))  # width, length
-
-    def load_geofence_points(self, filename):
-        self.fence_manager.cmd_fence(['load', filename])
-
-    def track_xy(self, pwm, direction):
-        if direction in ['x', 'y']:
-            sign = numpy.sign(pwm - 1500)
-            while self.motor_event_enabled and self.loop % 2 == 0:
-                start_time = int(time())
-                self.xy[direction] += sign
-                self.sample(channel)
-                time.sleep(1 - (int(time()) - start_time) % 1)
-            else:
-                self.xy['x'] = len(self.pollution_array)
-            if direction == 'y':
-                sign *= -1
-            while self.motor_event_enabled and self.loop % 2 == 1:
-                start_time = int(time())
-                self.xy[direction] -= sign
-                self.sample(channel)
-                time.sleep(1 - (int(time()) - start_time) % 1)
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
@@ -267,25 +259,30 @@ class AUVModule(mp_module.MPModule):
             self.module('rc').override[3] = args[1]
             self.module('rc').send_rc_override()
             return
+        elif args[0] == "end_dense":
+            self.dense = False
+            self.module('rc').override[4] = args[1]
+            self.module('rc').send_rc_override()
+            return
         else:
             return "Usage: move <f|l|z|r|y> pwm seconds"
 
     '''underwater sparse traverse function'''
     def underwater_traverse(self, start, end, distance, heading, current=1):
-        start_time = int(time())
+        self.start_time = time()
         end_time = int(time()) + distance + 1  # seconds
-        '''Measure the run times and order of how this code segment runs'''
-        self.traverse(distance+1)
-        if self.sample():
-            elapsed_time = (int(time()) - start_time) + start_time
-            remaining_distance = end_time - self.dense_traverse() - elapsed_time
-            end_time = int(time()) + remaining_distance + 1
         if distance == 1:
             self.loops += 1
+        '''Measure the run times and order of how this code segment runs'''
+        self.traverse(distance+1)
         return
 
     ''' dense traverse function that is called when pollution is above a threshold'''
     def dense_traverse(self, forward_increment=3, pwm=1550, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
+
+        self.module('rc').stop()
+        self.end_time = 0
+        self.dense = True
 
         if forward_distance_to_edge < forward_travel_distance:
             forward_travel_distance = forward_distance_to_edge - 2
@@ -310,6 +307,9 @@ class AUVModule(mp_module.MPModule):
         turn_direction *= -1
         self.orient_heading(turn_direction, pwm)
 
+        remaining_distance = end_time - forward_travel_distance - elapsed_time
+        end_time = int(time()) + remaining_distance + 1
+
         return forward_travel_distance
 
     def batt_info(self):
@@ -317,10 +317,15 @@ class AUVModule(mp_module.MPModule):
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self):
+
+        do = self.sensor_reader.read("2").rstrip()
+        cond = self.sensor_reader.read("3").rstrip()
+        temp = self.temp_sensor[2]
+
         with open("/home/pi/sensor_battery.txt", "a+") as f:
-            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (self.sensor_reader.read("2").rstrip(), self.sensor_reader.read("3").rstrip(), self.temp_sensor[2], self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
+            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
         # pollution_array[self.xy['x']][self.xy['y']] = pollution_value
-        return
+        return (do >= '''high value''', cond >= '''high value''', temp >= 3000)
 
     def psensor_update(self, SCALED_PRESSURE3):
         '''update pressure sensor readings'''
@@ -353,8 +358,9 @@ class AUVModule(mp_module.MPModule):
         self.current_battery = SYS_STATUS.current_battery
 
     def idle_task(self):
-        '''time motor events, track battery usage, and time sensor readings'''
+        '''time motor events, track battery usage, monitor system, and time sensor readings'''
         now = time()
+
         if self.module('rc').override_period.trigger():
             if (self.module('rc').override != [1500] * 16 or
                 self.module('rc').override != self.module('rc').last_override or
@@ -363,30 +369,44 @@ class AUVModule(mp_module.MPModule):
                 self.module('rc').send_rc_override()
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
+
+        if  # Check hardware
+
+
+
+
+        self.mav.set_mode_manual()  # keeps auv armed
+
         # extremely time critical, as the code must send the next 'rc' cmd before the 3 second disarm timeout
         if self.end_time <= time():
             self.module('rc').stop()  # this resets the disarm timer
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
+            self.write_to_battery.append("uJoules: %s, Run time: %s, Time: %s \n" % (self.ujoules, self.motor_run_time, strftime("%H:%M:%S")))
             try:
                 command=self.command_queue.popleft()
                 self.cmd_move(command)
-                self.end_time=time() + command[2]
-                self.write_to_battery.append("uJoules: %s, Run time: %s, Time: %s \n" % (self.ujoules, self.motor_run_time, strftime("%H:%M:%S")))
-                self.motor_run_time=command[2]
-                self.ujoules=0
+                self.end_time = time() + command[2]
+                self.motor_run_time = command[2]
+                self.ujoules = 0
             # *
             except IndexError:
                 self.end_time = time() + 1
                 with open("/home/pi/motor_battery.txt", "a+") as f:
                     f.write(''.join(self.write_to_battery))
                 self.write_to_battery = []
+
         if now - self.last_batt >= 1:
-            self.last_batt=now
+            self.last_batt = now
             self.ujoules += self.batt_info()
+
         if now - self.last_sample > 1:
-            self.last_sample=now
-            self.sample()
+            self.last_sample = now
+            # * Code between asterisks must execute in under 3 seconds to keep auv armed
+            if any(self.sample()) and self.dense is False:
+                self.command_queue.append(["end_dense", 1600, (self.end_time - self.dense_traverse() - (time() - self.start_time))])
+
         self.mav.set_mode_manual()  # keeps auv armed
+        # *
 
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
@@ -457,7 +477,7 @@ class AUVModule(mp_module.MPModule):
                     self.say("waypoint %u" % m.seq, priority='message')
 
         elif mtype == "MISSION_ITEM_REACHED":
-            wp = self.wploader.wp(m.seq)
+            wp = self.module('wp').wploader.wp(m.seq)
             if wp is None:
                 # should we spit out a warning?!
                 # self.say("No waypoints")
@@ -471,38 +491,38 @@ class AUVModule(mp_module.MPModule):
                 self.next_wp = wp
 
         elif m.get_type() == "FENCE_STATUS":
-            self.fence_manager.last_fence_breach = m.breach_time
-            self.fence_manager.last_fence_status = m.breach_status
+            self.module('fence').last_fence_breach = m.breach_time
+            self.module('fence').last_fence_status = m.breach_status
         elif m.get_type() in ['SYS_STATUS']:
             bits = mavutil.mavlink.MAV_SYS_STATUS_GEOFENCE
 
             present = ((m.onboard_control_sensors_present & bits) == bits)
-            if self.fence_manager.present is False and present is True:
+            if self.module('fence').present is False and present is True:
                 self.say("fence present")
-            elif self.fence_manager.present is True and present is False:
+            elif self.module('fence').present is True and present is False:
                 self.say("fence removed")
             self.present = present
 
             enabled = ((m.onboard_control_sensors_enabled & bits) == bits)
-            if self.fence_manager.enabled is False and enabled is True:
+            if self.module('fence').enabled is False and enabled is True:
                 self.say("fence enabled")
-            elif self.fence_manager.enabled is True and enabled is False:
+            elif self.module('fence').enabled is True and enabled is False:
                 self.say("fence disabled")
-            self.fence_manager.enabled = enabled
+            self.module('fence').enabled = enabled
 
             healthy = ((m.onboard_control_sensors_health & bits) == bits)
-            if self.fence_manager.healthy is False and healthy is True:
+            if self.module('fence').healthy is False and healthy is True:
                 self.say("fence OK")
-            elif self.fence_manager.healthy is True and healthy is False:
+            elif self.module('fence').healthy is True and healthy is False:
                 self.say("fence breach")
-            self.fence_manager.healthy = healthy
+            self.module('fence').healthy = healthy
 
             # console output for fence:
-            if self.fence_manager.enabled is False:
-                self.fence_manager.console.set_status('Fence', 'FEN', row=0, fg='grey')
-            elif self.fence_manager.enabled is True and self.fence_manager.healthy is True:
+            if self.module('fence').enabled is False:
+                self.module('fence').console.set_status('Fence', 'FEN', row=0, fg='grey')
+            elif self.module('fence').enabled is True and self.module('fence').healthy is True:
                 self.console.set_status('Fence', 'FEN', row=0, fg='green')
-            elif self.fence_manager.enabled is True and self.fence_manager.healthy is False:
+            elif self.module('fence').enabled is True and self.module('fence').healthy is False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
 
 
