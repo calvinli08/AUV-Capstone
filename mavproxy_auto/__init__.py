@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 
-import os
-import os.path
 import sys
 import numpy
 import errno
@@ -9,13 +7,13 @@ from pymavlink import mavutil, mavwp
 from time import strftime, time
 from collections import deque
 from math import sqrt, pow
+from os import system
+from re import match, search, compile
+from MAVProxy.modules.mavproxy_auto.errors import PWMError, FileError, HardwareError
 
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
-from MAVProxy.modules import mp_waypoint
-from MAVProxy.modules import mp_rc
-from MAVProxy.modules import mp_fence
 from MAVProxy.modules import SerialReader
 
 
@@ -66,53 +64,61 @@ class AUVModule(mp_module.MPModule):
         self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test', 'surface', 'underwater', 'setfence'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test', 'mission', 'setfence'])
         self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
 
         self.mav = mavutil.mavfile(None, None)  # only using set_mode_manual(), so fd and address can be None
         self.wp_loader = mavwp.MAVWPLoader(self.target_system, self.target_component)
 
+        self.servo_output_raw = []
+        self.rc_channels_raw = []
+        self.rc_regexp = compile('chan[1-6]_raw')
+        self.servo_regexp = compile('servo[1-6]_raw')
+
     def usage(self):
         '''show help on command line options'''
-        return "Usage: auto <test|setfence|surface|underwater>"
+        return "Usage: auto <test|setfence|mission>"
 
     def cmd_auto(self, args):
         '''control behaviour of the module'''
         if len(args) == 0:
             print self.usage()
-        elif args[0] == "surface":
-            '''Generate surface waypoints'''
-            self.cmd_surface()
-        elif args[0] == "underwater":
-            self.cmd_underwater(args[1:])
+        elif args[0] == "mission":
+            try:
+                self.load_waypoints('/home/pi/waypoints.txt')
+            except FileError:
+                print FileError.message
+                return
+            self.run()
         elif args[0] == "setfence":
-            print self.cmd_geofence(args[1:])
+            self.load_geofence_points('home/pi/fence.txt')
+            self.calculate_geofence_edge_lengths()
+            return
         elif args[0] == "test":
             print self.test1()
         else:
             print self.usage()
+        return
 
     def cmd_dense(self, args):
         if len(args) == 0:
-            return "Usage: dense start forward_increment
+            return "Usage: dense start forward_increment"
         elif args[0] == 'start':
             self.dense_traverse(int(args[1]))
         else:
             return "Usage: dense forward_increment"
 
-    def cmd_underwater(self, args):
-        if args[0] == "start":
-            self.load_geofence_points("/home/pi/waypoints.txt")
-            self.run()
-        else:
-            return "Usage: auto underwater start"
-
-    def cmd_geofence(self, args):
-        return "Not yet implemented"
+    def load_waypoints(self, filename):
+        self.module('wp').load_waypoints(filename)
+        self.next_wp = self.wp_loader.wp(0)
+        if self.next_wp is None:
+            self.module('arm').cmd_disarm('force')
+            raise FileError("Waypoint loading unsuccessful. Please check that the waypoint file is populated.\n")
+        return
 
     def calculate_geofence_edge_lengths(self):
         '''calculate length of geofence rectangle sides'''
-        f = open('fence.txt', "r")
+        f = open('/home/pi/fence.txt', "r")
         points = []
         p = []
         for line in f:
@@ -125,11 +131,6 @@ class AUVModule(mp_module.MPModule):
 
     def load_geofence_points(self, filename):
         self.modules('fence').cmd_fence(['load', filename])
-        self.next_wp = self.wp_loader.wp(0)
-        if self.next_wp is None:
-            print("Waypoint loading unsuccessful. Please check that the waypoint file is populated.\n")
-            self.module('arm').cmd_disarm('force')
-            break
 
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
@@ -195,10 +196,13 @@ class AUVModule(mp_module.MPModule):
             self.surface()
 
         except HardwareError:
-            return HardwareError.message
+            print(HardwareError.message)
+            return self.go_home()
 
         except ValueError:
-            sleep(60)
+            print(ValueError.message)
+            return self.go_home()
+
 
         numpy.savetxt('pollution_array.txt', self.pollution_array)
         return
@@ -317,7 +321,6 @@ class AUVModule(mp_module.MPModule):
 
     # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self):
-
         do = self.sensor_reader.read("2").rstrip()
         cond = self.sensor_reader.read("3").rstrip()
         temp = self.temp_sensor[2]
@@ -350,16 +353,83 @@ class AUVModule(mp_module.MPModule):
         self.vz = GLOBAL_POSITION_INT.vz
         self.hdg = GLOBAL_POSITION_INT.hdg
 
+    def rc_update(self, RC_CHANNELS_RAW):
+        self.rc_channels_raw = [1800 < RC_CHANNELS_RAW[key] < 1200 for key in RC_CHANNELS_RAW.iteritems() if self.rc_regexp.match(key)]
+        return
+
+    def servo_update(self, SERVO_OUTPUT_RAW):
+        self.servo_output_raw = [1800 < SERVO_OUTPUT_RAW[key] < 1200 for key in SERVO_OUTPUT_RAW.iteritems() if self.servo_regexp.match(key)]
+        return
+
     def battery_update(self, SYS_STATUS):
         '''update battery level'''
-        # main flight battery
-        # self.battery_level = SYS_STATUS.battery_remaining
         self.voltage_level = SYS_STATUS.voltage_battery
         self.current_battery = SYS_STATUS.current_battery
+
+    def battery_percentage(self):
+        voltage = self.voltage_level/1000
+        if 16 < voltage < 17:
+            return 75
+        elif 15 < voltage < 16:
+            return 50
+        elif 14 < voltage < 15:
+            return 40
+        elif 13 < voltage < 14:
+            return 30
+
+    def hardware_check(self):
+        '''Checks that hardware is well functioning'''
+        #  Check for heartbeats, mavlink messages, leaks, bad voltage levels?, v/i input from the esc?
+        if any(self.servo_output_raw) or any(self.rc_channels_raw):
+            raise PWMError('PWM values out of bounds, disarming')
+        elif self.battery_percentage() < 50:
+            raise HardwareError([2, 'Low Battery'])
+        elif '''lost connection to pixhawk''':
+            raise HardwareError([3, 'Lost connection to Pixhawk'])
+        elif '''motor is dead''':
+            raise HardwareError([4, 'Motor Failure'])
+        elif '''absolute failure''':
+            raise HardwareError([0, 'Irrecoverable Electrical Failure'])
+        return
 
     def idle_task(self):
         '''time motor events, track battery usage, monitor system, and time sensor readings'''
         now = time()
+
+        try:
+            self.hardware_check()
+
+        except PWMError:
+            print(PWMError.message)
+            self.module('arm').disarm('force')
+
+        '''
+        0 - Irrecoverable Electrical Failure
+        1 - Insufficient Battery
+        2 - Low Battery
+        3 - Lost Connection to Pixhawk
+        4 - Motor Failure
+        '''
+        except HardwareError:
+            if HardwareError.errno is 2:
+                print(HardwareError.message)
+                self.go_home()
+            elif HardwareError.errno is 3:
+                print(HardwareError.message)
+                self.module('arm').disarm('force')
+            elif HardwareError.errno is 4:
+                print(HardwareError.message)
+                self.module('rc').override = [1500 1700 1500 1500 1500 1500 1500 1500]
+                self.module('rc').send_rc_override()
+                sleep(6)
+                self.module('arm').disarm('force')
+            elif HardwareError.errno is 0:
+                print(HardwareError.message)
+                self.module('rc').override = [1500 1700 1500 1500 1500 1500 1500 1500]
+                self.module('rc').send_rc_override()
+                sleep(6)
+                self.mav.reboot_autopilot()
+                system('sudo reboot now')
 
         if self.module('rc').override_period.trigger():
             if (self.module('rc').override != [1500] * 16 or
@@ -369,11 +439,6 @@ class AUVModule(mp_module.MPModule):
                 self.module('rc').send_rc_override()
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
-
-        if  # Check hardware
-
-
-
 
         self.mav.set_mode_manual()  # keeps auv armed
 
@@ -411,6 +476,7 @@ class AUVModule(mp_module.MPModule):
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
         mtype = m.get_type()
+        print mtype
         if mtype == 'GLOBAL_POSITION_INT':
             if self.settings.target_system == 0 or self.settings.target_system == m.get_srcSystem():
                 self.gps_update(m)
@@ -423,6 +489,12 @@ class AUVModule(mp_module.MPModule):
 
         if mtype == "SYS_STATUS":
             self.battery_update(m)
+
+        if mtype == 'RC_CHANNELS_RAW':
+            self.rc_update(m)
+
+        if mtype == 'SERVO_OUTPUT_RAW':
+            self.servo_update(m)
 
         if mtype in ['WAYPOINT_COUNT', 'MISSION_COUNT']:
             if self.wp_op is None:
@@ -524,12 +596,6 @@ class AUVModule(mp_module.MPModule):
                 self.console.set_status('Fence', 'FEN', row=0, fg='green')
             elif self.module('fence').enabled is True and self.module('fence').healthy is False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
-
-
-class HardwareError(EnvironmentError):
-    def __init__(self, args):
-        self.errno = int(args[0])
-        self.message = str(args[1])
 
 
 class motor_event(object):
