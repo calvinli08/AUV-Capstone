@@ -9,7 +9,6 @@ from collections import deque
 from math import sqrt, pow
 from os import system
 from re import match, search, compile
-from MAVProxy.modules.mavproxy_auto.errors import PWMError, FileError, HardwareError
 
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
@@ -60,6 +59,7 @@ class AUVModule(mp_module.MPModule):
         self.end_time = 0
         self.motor_run_time = 0
 
+        '''Sampling'''
         self.last_sample = time()
         self.sensor_reader = SerialReader.SerialReader()
 
@@ -67,14 +67,19 @@ class AUVModule(mp_module.MPModule):
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test', 'mission', 'setfence'])
         self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
 
+        '''low-level pymavlink functionality'''
         self.mav = mavutil.mavfile(None, None)  # only using set_mode_manual(), so fd and address can be None
         self.wp_loader = mavwp.MAVWPLoader(self.target_system, self.target_component)
 
+        '''Failsafe checks'''
         self.time_since_last_heartbeat = time()
         self.servo_output_raw = []
         self.rc_channels_raw = []
         self.rc_regexp = compile('chan[1-6]_raw')
         self.servo_regexp = compile('servo[1-6]_raw')
+        self.mav_state_critical = False
+        self.mav_state_emergency = False
+
 
     def usage(self):
         '''show help on command line options'''
@@ -131,7 +136,7 @@ class AUVModule(mp_module.MPModule):
         return (min(distance_between_points), max(distance_between_points))  # width, length
 
     def load_geofence_points(self, filename):
-        self.modules('fence').cmd_fence(['load', filename])
+        return self.modules('fence').cmd_fence(['load', filename])
 
     def track_xy(self, pwm, direction):
         if direction in ['x', 'y']:
@@ -212,8 +217,7 @@ class AUVModule(mp_module.MPModule):
             print(ValueError.message)
             return self.go_home()
 
-        numpy.savetxt('pollution_array.txt', self.pollution_array)
-        return
+        return numpy.savetxt('pollution_array.txt', self.pollution_array)
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
@@ -281,8 +285,7 @@ class AUVModule(mp_module.MPModule):
         if distance == 1:
             self.loops += 1
         '''Measure the run times and order of how this code segment runs'''
-        self.traverse(distance+1)
-        return
+        return self.traverse(distance+1)
 
     ''' dense traverse function that is called when pollution is above a threshold'''
     def dense_traverse(self, forward_increment=3, pwm=1550, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
@@ -333,7 +336,7 @@ class AUVModule(mp_module.MPModule):
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
         # pollution_array[self.xy['x']][self.xy['y']] = pollution_value
 
-        return ( '''5 mg/L''' <= do <= '''14 mg/L''', <= cond <= , 1000 <= temp <= 3000)
+        return (14 <= do <= 5, cond <= 800, 3000 <= temp <= 1000)
 
     def psensor_update(self, SCALED_PRESSURE3):
         '''update pressure sensor readings'''
@@ -388,19 +391,19 @@ class AUVModule(mp_module.MPModule):
         #  Check for heartbeats, mavlink messages, leaks, bad voltage levels?, v/i input from the esc?
         if any(self.servo_output_raw) or any(self.rc_channels_raw):
             raise PWMError('PWM values out of bounds, disarming')
-        elif self.battery_percentage() < 50:
+        elif self.battery_percentage() < 40:
             raise HardwareError([2, 'Low Battery'])
-        elif self.time_since_last_heartbeat > 20:  # no heartbeat, try to use ping
+        elif self.time_since_last_heartbeat > 20:
             raise HardwareError([3, 'Lost connection to Pixhawk'])
-        elif '''motor is dead''':  # try to use ping?
-            raise HardwareError([4, 'Motor Failure'])
-        elif '''absolute failure''':
+        elif self.mav_state_critical:
+            raise HardwareError([4, 'Critical Condition'])
+        elif self.mav_state_emergency:
             raise HardwareError([0, 'Irrecoverable Electrical Failure'])
         return
 
     def surface_and_disarm(self, message):
         print(message)
-        self.module('rc').override = [1500 1700 1500 1500 1500 1500 1500 1500]
+        self.module('rc').override = [1500, 1700, 1500, 1500, 1500, 1500, 1500, 1500]
         self.module('rc').send_rc_override()
         sleep(6)
         return self.module('arm').disarm('force')
@@ -418,14 +421,6 @@ class AUVModule(mp_module.MPModule):
             print(PWMError.message)
             self.module('arm').disarm('force')
 
-        '''
-        errno:
-        0 - Irrecoverable Electrical Failure
-        1 - Insufficient Battery
-        2 - Low Battery
-        3 - Lost Connection to Pixhawk
-        4 - Motor Failure
-        '''
         except HardwareError:
             if HardwareError.errno is 2:
                 print(HardwareError.message)
@@ -435,7 +430,7 @@ class AUVModule(mp_module.MPModule):
             elif HardwareError.errno is 4:
                 self.surface_and_disarm(HardwareError.message)
             elif HardwareError.errno is 0:
-                self.surface_and_disarm(HardwareError.message)
+                self.surface_and_disarm(HardwareError.message)  # try to surface
                 self.mav.reboot_autopilot()
                 system('sudo reboot now')
 
@@ -480,6 +475,7 @@ class AUVModule(mp_module.MPModule):
                 self.surface()
         self.mav.set_mode_manual()  # keeps auv armed
         # *
+        return
 
     def mavlink_packet(self, m):
         '''handle mavlink packets'''
@@ -488,26 +484,32 @@ class AUVModule(mp_module.MPModule):
         if mtype == 'HEARTBEAT':
             self.time_since_last_heartbeat = time() - self.time_since_last_heartbeat
 
-        if mtype == 'GLOBAL_POSITION_INT':
+        elif mtype == 'GLOBAL_POSITION_INT':
             if self.settings.target_system == 0 or self.settings.target_system == m.get_srcSystem():
                 self.gps_update(m)
 
-        if mtype == 'SCALED_PRESSURE3':
+        elif mtype == 'SCALED_PRESSURE3':
             self.psensor_update(m)
 
-        if mtype == 'SCALED_PRESSURE':
+        elif mtype == 'SCALED_PRESSURE':
             self.dsensor_update(m)
 
-        if mtype == "SYS_STATUS":
+        elif mtype == "SYS_STATUS":
             self.battery_update(m)
 
-        if mtype == 'RC_CHANNELS_RAW':
+        elif mtype == 'RC_CHANNELS_RAW':
             self.rc_update(m)
 
-        if mtype == 'SERVO_OUTPUT_RAW':
+        elif mtype == 'SERVO_OUTPUT_RAW':
             self.servo_update(m)
 
-        if mtype in ['WAYPOINT_COUNT', 'MISSION_COUNT']:
+        elif mtype == 'MAV_STATE_CRITICAL':
+            self.mav_state_critical = True
+
+        elif mtype == 'MAV_STATE_EMERGENCY':
+            self.mav_state_emergency = True
+
+        elif mtype in ['WAYPOINT_COUNT', 'MISSION_COUNT']:
             if self.wp_op is None:
                 self.console.error("No waypoint load started")
             else:
@@ -607,6 +609,32 @@ class AUVModule(mp_module.MPModule):
                 self.console.set_status('Fence', 'FEN', row=0, fg='green')
             elif self.module('fence').enabled is True and self.module('fence').healthy is False:
                 self.console.set_status('Fence', 'FEN', row=0, fg='red')
+
+            return
+
+
+class HardwareError(EnvironmentError):
+    '''
+    errno:
+    0 - Irrecoverable Electrical Failure
+    1 - Insufficient Battery
+    2 - Low Battery
+    3 - Lost Connection to Pixhawk
+    4 - Motor Failure
+    '''
+    def __init__(self, args):
+        self.errno = int(args[0])
+        self.message = str(args[1])
+
+
+class FileError(Exception):
+    def __init__(self, message):
+        self.message = message
+
+
+class PWMError(EnvironmentError):
+    def __init__(self, message):
+        self.message = message
 
 
 class motor_event(object):
