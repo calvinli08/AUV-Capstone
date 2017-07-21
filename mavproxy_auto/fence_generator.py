@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-'''Creates waypoints from lat/lng coordinates sent to it from a map API'''
+'''Creates geofence from lat/lng coordinates sent to it from a map API'''
 
 '''listen on the port from the app - implement when have time'''
 
@@ -8,7 +8,7 @@ index = 0
 
 while True:
 
-    coor = raw_input('Enter waypoint: ')
+    coor = raw_input('Enter fence point: ')
 
     _coor = coor.split()
 
@@ -17,5 +17,5 @@ while True:
     index += 1
 
     # write points to file
-    with open('/home/pi/waypoints.txt', "a+") as f:
+    with open('/home/pi/fence.txt', "a+") as f:
         f.write(wp)

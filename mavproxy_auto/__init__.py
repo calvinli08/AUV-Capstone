@@ -29,6 +29,7 @@ class AUVModule(mp_module.MPModule):
         self.xy = {'x': 0, 'y': 0}  # x,y
         self.dense = False
         self.start_time = 0
+        self.home = {'lat': 0, 'lng': 0}
 
         '''Attitude'''
         self.lat = 0
@@ -64,8 +65,7 @@ class AUVModule(mp_module.MPModule):
         self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
-        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['test', 'mission', 'setfence'])
-        self.add_command('dense', self.cmd_dense, "dense traversal", ['start'])
+        self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['home', 'test', 'mission', 'setfence'])
 
         '''low-level pymavlink functionality'''
         self.mav = mavutil.mavfile(None, None)  # only using set_mode_manual(), so fd and address can be None
@@ -79,7 +79,6 @@ class AUVModule(mp_module.MPModule):
         self.servo_regexp = compile('servo[1-6]_raw')
         self.mav_state_critical = False
         self.mav_state_emergency = False
-
 
     def usage(self):
         '''show help on command line options'''
@@ -95,24 +94,20 @@ class AUVModule(mp_module.MPModule):
             except FileError:
                 print FileError.message
                 return
-            self.run()
+            return self.run()
         elif args[0] == "setfence":
             self.load_geofence_points('home/pi/fence.txt')
             self.calculate_geofence_edge_lengths()
             return
         elif args[0] == "test":
             print self.test1()
+        elif args[0] == "home":
+            self.home['lat'] = args[1]  # lat
+            self.home['lng'] = args[2]  # lng
+            return
         else:
             print self.usage()
         return
-
-    def cmd_dense(self, args):
-        if len(args) == 0:
-            return "Usage: dense start forward_increment"
-        elif args[0] == 'start':
-            self.dense_traverse(int(args[1]))
-        else:
-            return "Usage: dense forward_increment"
 
     def load_waypoints(self, filename):
         self.module('wp').load_waypoints(filename)
@@ -138,23 +133,13 @@ class AUVModule(mp_module.MPModule):
     def load_geofence_points(self, filename):
         return self.modules('fence').cmd_fence(['load', filename])
 
-    def track_xy(self, pwm, direction):
-        if direction in ['x', 'y']:
-            sign = numpy.sign(pwm - 1500)
-            while self.motor_event_enabled and self.loop % 2 == 0:
-                start_time = int(time())
-                self.xy[direction] += sign
-                self.sample(channel)
-                time.sleep(1 - (int(time()) - start_time) % 1)
-            else:
-                self.xy['x'] = len(self.pollution_array)
-            if direction == 'y':
-                sign *= -1
-            while self.motor_event_enabled and self.loop % 2 == 1:
-                start_time = int(time())
-                self.xy[direction] -= sign
-                self.sample(channel)
-                time.sleep(1 - (int(time()) - start_time) % 1)
+    def track_xy(self):
+        if self.loop % 2 == 0:
+            self.xy['x'] += 1
+        else:
+            self.xy['x'] = len(self.pollution_array)
+        if self.loop % 2 == 1:
+            self.xy['x'] -= sign
 
     '''unit test delete later '''
     def test1(self):
@@ -172,7 +157,7 @@ class AUVModule(mp_module.MPModule):
             raise ValueError('self.next_wp is None')
         if self.battery >= 60.0:
             return
-        elif 35.0 <= self.battery < 60.0 and  '''run battery voltage tests''' > 2:
+        elif 55.0 <= self.battery < 60.0:
             return
         else:
             raise HardwareError([1, 'Insufficient Battery'])
@@ -197,14 +182,11 @@ class AUVModule(mp_module.MPModule):
             array_edges = self.calculate_geofence_edge_lengths()
             self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
 
-            self.dive()
+            # self.dive()
 
-            # x = lat, y = lng
-            self.underwater_traverse([self.lng, self.lat],
-                                     [self.next_wp.MAVLink_mission_item_message.y,                        self.next_wp.MAVLink_mission_item_message.x],
-                                     self.distance_to_waypoint, heading)
+            self.underwater_traverse(self.distance_to_waypoint)
 
-            self.surface()
+            # self.surface()
 
             # Tells this function to run again, this implements the loop functionality
             self.continue_mission()
@@ -239,6 +221,26 @@ class AUVModule(mp_module.MPModule):
         else:
             return self.command_queue.append(["y", cw_pwm, 2])
 
+    def go_home(self):
+        '''returns to home coordinate'''
+        self.module('rc').override = [1500, 1700, 1500, 1500, 1500, 1500, 1500, 1500]
+        self.module('rc').send_rc_override()
+        sleep(2)
+
+        # Distance to the next waypoint
+        self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon, self.home[lat], self.home[lng])
+
+        # Offset in degrees from the direction of the next waypoint
+        self.offset_from_intended_heading = mp_util.gps_bearing(self.lat, self.lon, self.home[lat], self.home[lng])
+
+        # Spins the AUV towards the correct direction
+        self.orient_heading(self.offset_from_intended_heading)
+
+        self.module('rc').stop()
+        self.command_queue.clear()
+        self.end_time = 0
+        self.command_queue.append(["f", 1650, self.distance_to_waypoint])
+
     def continue_mission(self):
         return self.command_queue.append(["continue_mission", 1500, 0])
 
@@ -254,12 +256,12 @@ class AUVModule(mp_module.MPModule):
         elif args[0] == "f":  # forward
             self.module('rc').override[4] = args[1]
             return self.module('rc').send_rc_override()
-            # self.track_xy(args[1], 'y')
+            self.track_xy(args[1], 'y')
         elif args[0] == "l":  # lateral
             # This is how the joystick module does it
             self.module('rc').override[5] = args[1]
             return self.module('rc').send_rc_override()
-            # self.track_xy(args[1], 'y')
+            self.track_xy(args[1], 'y')
         elif args[0] == "z":  # dive/surface
             self.module('rc').override[1] = args[1]
             return self.module('rc').send_rc_override()
@@ -279,9 +281,8 @@ class AUVModule(mp_module.MPModule):
             return "Usage: move <f|l|z|r|y> pwm seconds"
 
     '''underwater sparse traverse function'''
-    def underwater_traverse(self, start, end, distance, heading, current=1):
+    def underwater_traverse(self, distance, current=1):
         self.start_time = time()
-        end_time = int(time()) + distance + 1  # seconds
         if distance == 1:
             self.loops += 1
         '''Measure the run times and order of how this code segment runs'''
@@ -334,9 +335,9 @@ class AUVModule(mp_module.MPModule):
 
         with open("/home/pi/sensor_battery.txt", "a+") as f:
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
-        # pollution_array[self.xy['x']][self.xy['y']] = pollution_value
+        pollution_array[self.xy['x']][self.xy['y']] = (do, cond, temp)
 
-        return (14 <= do <= 5, cond <= 800, 3000 <= temp <= 1000)
+        return (14 <= do <= 5, cond <= 800, 8.2 <= ph <= 6.8, 3000 <= temp <= 1000)
 
     def psensor_update(self, SCALED_PRESSURE3):
         '''update pressure sensor readings'''
@@ -468,6 +469,7 @@ class AUVModule(mp_module.MPModule):
             self.ujoules += self.batt_info()
 
         if now - self.last_sample > 1:
+            self.track_xy()
             self.last_sample = now
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
             if any(self.sample()) and self.dense is False:
