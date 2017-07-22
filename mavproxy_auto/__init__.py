@@ -24,9 +24,10 @@ class AUVModule(mp_module.MPModule):
         '''Navigational information'''
         self.next_wp = []  # lat,lng
         self.offset_from_intended_heading = 0
-        self.pollution_array = numpy.zeros([100, 100])  # initialize later
+        self.pollution_array = numpy.zeros([100, 100], numpy.dtype(object), 'C')  # initialize later
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
+	self.y = True
         self.dense = False
         self.start_time = 0
         self.home = {'lat': 0, 'lng': 0}
@@ -132,14 +133,17 @@ class AUVModule(mp_module.MPModule):
     def load_geofence_points(self, filename):
         return self.modules('fence').cmd_fence(['load', filename])
 
-    def track_xy(self):
-        if self.loops % 2 == 0:
-            self.xy['x'] += 1
-        else:
+    def track_xy(self, y=False):
+        print ('HEY')
+        if y:
+	    self.xy['y'] += 1 
+        elif self.loops % 2 == 0:
+            self.xy['x'] += 1            
+        elif self.loops % 2 == 1:
             self.xy['x'] = len(self.pollution_array)
-        if self.loops % 2 == 1:
-            self.xy['x'] -= sign
-
+	    self.xy['x'] -= sign
+	return
+	   
     '''unit test delete later '''
     def test1(self):
         '''yaw motor test'''
@@ -179,7 +183,7 @@ class AUVModule(mp_module.MPModule):
 
             # Sets the size of the pollution array
             array_edges = self.calculate_geofence_edge_lengths()
-            self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], float, 'C')  # each square meter is a point
+            self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], numpy.dtype(object), 'C')  # each square meter is a point
 
             # self.dive()
 
@@ -198,7 +202,7 @@ class AUVModule(mp_module.MPModule):
             print(ValueError.message)
             return self.go_home()
 
-        return numpy.savetxt('pollution_array.txt', self.pollution_array)
+        return numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
@@ -215,10 +219,12 @@ class AUVModule(mp_module.MPModule):
         diff = abs(pwm - 1500)
         ccw_pwm = 1500 - diff
         cw_pwm = 1500 + diff
+        self.y = not self.y  
         if offset_from_intended_heading > 0:
             return self.command_queue.append(["y", ccw_pwm, 2])
         else:
             return self.command_queue.append(["y", cw_pwm, 2])
+	 	
 
     def go_home(self):
         '''returns to home coordinate'''
@@ -250,18 +256,18 @@ class AUVModule(mp_module.MPModule):
     # yaw - 4
     # forward - 5
     # lateral - 6
-    def cmd_move(self, args):
-        if len(args) != 3:
+    # @param y - indicates whether forward movement is in 'y' direction
+    def cmd_move(self, args, y=False):
+        if len(args) != 4:
             return "Usage: move <f|l|z|roll|yaw> pwm"
         elif args[0] == "f":  # forward
 	    self.module('rc').override[4] = args[1]
-            return self.module('rc').send_rc_override()
-            self.track_xy(args[1], 'y')
+            self.module('rc').send_rc_override()
+            return self.track_xy(args[1], self.y)
         elif args[0] == "l":  # lateral
             # This is how the joystick module does it
 	    self.module('rc').override[5] = args[1]
             return self.module('rc').send_rc_override()
-            self.track_xy(args[1], 'y')
         elif args[0] == "z":  # dive/surface
             self.module('rc').override[1] = args[1]
             return self.module('rc').send_rc_override()
@@ -328,15 +334,17 @@ class AUVModule(mp_module.MPModule):
         return float(self.current_battery) * float(self.voltage_level)  # micro-watts
 
     def sample(self):
-        do = self.sensor_reader.read("2").rstrip()
-        cond = self.sensor_reader.read("3").rstrip()
+        do = float(self.sensor_reader.read("2").rstrip())
+        cond = float(self.sensor_reader.read("3").rstrip())
         temp = self.temp_sensor[2]
 
         with open("/home/pi/sensor_battery.txt", "a+") as f:
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
-        #self.pollution_array[self.xy['x']][self.xy['y']] = [do, cond, temp]
+        self.pollution_array[self.xy['x'], self.xy['y']] = (do, cond, temp)
+	numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
+	print self.xy
 
-        return (14 <= do <= 5, cond <= 800, 3000 <= temp <= 1000)
+        return (do >= 14.0, do <= 5.0, cond <= 800.0, temp >= 3000.0, temp <= 1000.0)
 
     def psensor_update(self, SCALED_PRESSURE3):
         '''update pressure sensor readings'''
@@ -442,7 +450,6 @@ class AUVModule(mp_module.MPModule):
                 #system('sudo reboot now')
 
         if self.module('rc').override_period.trigger():
-	    print('called!')
             if (self.module('rc').override != [1500] * 16 or
                 self.module('rc').override != self.module('rc').last_override or
                 self.module('rc').override_counter > 0):
@@ -477,7 +484,9 @@ class AUVModule(mp_module.MPModule):
             self.track_xy()
             self.last_sample = now
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
+	    print self.sample()
             if any(self.sample()) and self.dense is False:
+		print('Densing!')
                 self.command_queue.append(["end_dense", 1600, (self.end_time - self.dense_traverse() - (time() - self.start_time))])
                 self.surface()
         # *
