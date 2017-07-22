@@ -24,7 +24,7 @@ class AUVModule(mp_module.MPModule):
         '''Navigational information'''
         self.next_wp = []  # lat,lng
         self.offset_from_intended_heading = 0
-        self.pollution_array = numpy.zeros([2, 2])  # initialize later
+        self.pollution_array = numpy.zeros([100, 100])  # initialize later
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
         self.dense = False
@@ -68,11 +68,10 @@ class AUVModule(mp_module.MPModule):
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['home', 'test', 'mission', 'setfence'])
 
         '''low-level pymavlink functionality'''
-        self.mav = mavutil.mavfile(None, None)  # only using set_mode_manual(), so fd and address can be None
         self.wp_loader = mavwp.MAVWPLoader(self.target_system, self.target_component)
 
         '''Failsafe checks'''
-        self.time_since_last_heartbeat = time()
+        self.time_at_last_heartbeat = time()
         self.servo_output_raw = []
         self.rc_channels_raw = []
         self.rc_regexp = compile('chan[1-6]_raw')
@@ -134,11 +133,11 @@ class AUVModule(mp_module.MPModule):
         return self.modules('fence').cmd_fence(['load', filename])
 
     def track_xy(self):
-        if self.loop % 2 == 0:
+        if self.loops % 2 == 0:
             self.xy['x'] += 1
         else:
             self.xy['x'] = len(self.pollution_array)
-        if self.loop % 2 == 1:
+        if self.loops % 2 == 1:
             self.xy['x'] -= sign
 
     '''unit test delete later '''
@@ -223,6 +222,7 @@ class AUVModule(mp_module.MPModule):
 
     def go_home(self):
         '''returns to home coordinate'''
+	print ('HOMING')
         self.module('rc').override = [1500, 1700, 1500, 1500, 1500, 1500, 1500, 1500]
         self.module('rc').send_rc_override()
         sleep(2)
@@ -254,12 +254,12 @@ class AUVModule(mp_module.MPModule):
         if len(args) != 3:
             return "Usage: move <f|l|z|roll|yaw> pwm"
         elif args[0] == "f":  # forward
-            self.module('rc').override[4] = args[1]
+	    self.module('rc').override[4] = args[1]
             return self.module('rc').send_rc_override()
             self.track_xy(args[1], 'y')
         elif args[0] == "l":  # lateral
             # This is how the joystick module does it
-            self.module('rc').override[5] = args[1]
+	    self.module('rc').override[5] = args[1]
             return self.module('rc').send_rc_override()
             self.track_xy(args[1], 'y')
         elif args[0] == "z":  # dive/surface
@@ -269,7 +269,7 @@ class AUVModule(mp_module.MPModule):
             self.module('rc').override[2] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "y":  # yaw
-            self.module('rc').override[3] = args[1]
+	    self.module('rc').override[3] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "end_dense":
             self.dense = False
@@ -327,7 +327,6 @@ class AUVModule(mp_module.MPModule):
     def batt_info(self):
         return float(self.current_battery) * float(self.voltage_level)  # micro-watts
 
-    # test threshold is 0.7, real threshold value will be pulled from environmental data
     def sample(self):
         do = self.sensor_reader.read("2").rstrip()
         cond = self.sensor_reader.read("3").rstrip()
@@ -335,9 +334,9 @@ class AUVModule(mp_module.MPModule):
 
         with open("/home/pi/sensor_battery.txt", "a+") as f:
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
-        pollution_array[self.xy['x']][self.xy['y']] = (do, cond, temp)
+        #self.pollution_array[self.xy['x']][self.xy['y']] = [do, cond, temp]
 
-        return (14 <= do <= 5, cond <= 800, 8.2 <= ph <= 6.8, 3000 <= temp <= 1000)
+        return (14 <= do <= 5, cond <= 800, 3000 <= temp <= 1000)
 
     def psensor_update(self, SCALED_PRESSURE3):
         '''update pressure sensor readings'''
@@ -363,11 +362,11 @@ class AUVModule(mp_module.MPModule):
         self.hdg = GLOBAL_POSITION_INT.hdg
 
     def rc_update(self, RC_CHANNELS_RAW):
-        self.rc_channels_raw = [1800 < RC_CHANNELS_RAW[key] < 1200 for key in RC_CHANNELS_RAW.iteritems() if self.rc_regexp.match(key)]
+        #self.rc_channels_raw = [1800 < RC_CHANNELS_RAW[key] < 1200 for key in RC_CHANNELS_RAW.iteritems() if self.rc_regexp.match(key)]
         return
 
     def servo_update(self, SERVO_OUTPUT_RAW):
-        self.servo_output_raw = [1800 < SERVO_OUTPUT_RAW[key] < 1200 for key in SERVO_OUTPUT_RAW.iteritems() if self.servo_regexp.match(key)]
+        #self.servo_output_raw = [1800 < SERVO_OUTPUT_RAW[key] < 1200 for key in SERVO_OUTPUT_RAW.iteritems() if self.servo_regexp.match(key)]
         return
 
     def battery_update(self, SYS_STATUS):
@@ -378,27 +377,30 @@ class AUVModule(mp_module.MPModule):
 
     def battery_percentage(self):
         voltage = self.voltage_level/1000
-        if 16 < voltage < 17:
+        if 16 <= voltage < 17:
             return 75
-        elif 15 < voltage < 16:
+        elif 15 <= voltage < 16:
             return 50
-        elif 14 < voltage < 15:
+        elif 14 <= voltage < 15:
             return 40
-        elif 13 < voltage < 14:
+        elif 13 <= voltage < 14:
             return 30
 
     def hardware_check(self):
         '''Checks that hardware is well functioning'''
-        #  Check for heartbeats, mavlink messages, leaks, bad voltage levels?, v/i input from the esc?
         if any(self.servo_output_raw) or any(self.rc_channels_raw):
             raise PWMError('PWM values out of bounds, disarming')
         elif self.battery_percentage() < 40:
+	    print(2)
             raise HardwareError([2, 'Low Battery'])
-        elif self.time_since_last_heartbeat > 20:
+        elif time() - self.time_at_last_heartbeat > 300:
+	    print(3)
             raise HardwareError([3, 'Lost connection to Pixhawk'])
         elif self.mav_state_critical:
+            print(4)
             raise HardwareError([4, 'Critical Condition'])
         elif self.mav_state_emergency:
+	    print(0)
             raise HardwareError([0, 'Irrecoverable Electrical Failure'])
         return
 
@@ -413,29 +415,34 @@ class AUVModule(mp_module.MPModule):
         '''time motor events, track battery usage, monitor system, and time sensor readings'''
         now = time()
 
-        self.mav.set_mode_manual()  # keeps auv armed
-
         try:
             self.hardware_check()
 
         except PWMError:
             print(PWMError.message)
+	    print ('disarminggggggggggggg')
             self.module('arm').disarm('force')
 
         except HardwareError:
+	    print('errrorrrrr')
             if HardwareError.errno is 2:
-                print(HardwareError.message)
-                self.go_home()
+		print(2)
+                #print(HardwareError.message)
+                #self.go_home()
             elif HardwareError.errno is 3:
-                self.surface_and_disarm(HardwareError.message)
+		print(3)
+                #self.surface_and_disarm(HardwareError.message)
             elif HardwareError.errno is 4:
-                self.surface_and_disarm(HardwareError.message)
+		print(4)
+                #self.surface_and_disarm(HardwareError.message)
             elif HardwareError.errno is 0:
-                self.surface_and_disarm(HardwareError.message)  # try to surface
-                self.mav.reboot_autopilot()
-                system('sudo reboot now')
+		print(0)
+                #self.surface_and_disarm(HardwareError.message)  # try to surface
+                #self.mav.reboot_autopilot()
+                #system('sudo reboot now')
 
         if self.module('rc').override_period.trigger():
+	    print('called!')
             if (self.module('rc').override != [1500] * 16 or
                 self.module('rc').override != self.module('rc').last_override or
                 self.module('rc').override_counter > 0):
@@ -443,8 +450,6 @@ class AUVModule(mp_module.MPModule):
                 self.module('rc').send_rc_override()
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
-
-        self.mav.set_mode_manual()  # keeps auv armed
 
         # extremely time critical, as the code must send the next 'rc' cmd before the 3 second disarm timeout
         if self.end_time <= time():
@@ -454,7 +459,7 @@ class AUVModule(mp_module.MPModule):
             try:
                 command=self.command_queue.popleft()
                 self.cmd_move(command)
-                self.end_time = time() + command[2]
+		self.end_time = time() + command[2]
                 self.motor_run_time = command[2]
                 self.ujoules = 0
             # *
@@ -475,7 +480,6 @@ class AUVModule(mp_module.MPModule):
             if any(self.sample()) and self.dense is False:
                 self.command_queue.append(["end_dense", 1600, (self.end_time - self.dense_traverse() - (time() - self.start_time))])
                 self.surface()
-        self.mav.set_mode_manual()  # keeps auv armed
         # *
         return
 
@@ -484,7 +488,7 @@ class AUVModule(mp_module.MPModule):
         mtype = m.get_type()
 
         if mtype == 'HEARTBEAT':
-            self.time_since_last_heartbeat = time() - self.time_since_last_heartbeat
+            self.time_at_last_heartbeat = time()
 
         elif mtype == 'GLOBAL_POSITION_INT':
             if self.settings.target_system == 0 or self.settings.target_system == m.get_srcSystem():
