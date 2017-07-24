@@ -27,7 +27,7 @@ class AUVModule(mp_module.MPModule):
         self.pollution_array = numpy.zeros([100, 100], numpy.dtype(object), 'C')  # initialize later
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
-	self.y = True
+        self.y = True
         self.dense = False
         self.start_time = 0
         self.home = {'lat': 0, 'lng': 0}
@@ -90,7 +90,7 @@ class AUVModule(mp_module.MPModule):
             print self.usage()
         elif args[0] == "mission":
             try:
-                self.load_waypoints('/home/pi/waypoints.txt')
+                self.load_waypoints('/home/pi/wps.txt')
             except FileError:
                 print FileError.message
                 return
@@ -134,25 +134,24 @@ class AUVModule(mp_module.MPModule):
         return self.modules('fence').cmd_fence(['load', filename])
 
     def track_xy(self, y=False):
-        print ('HEY')
         if y:
-	    self.xy['y'] += 1 
+            self.xy['y'] += 1
         elif self.loops % 2 == 0:
-            self.xy['x'] += 1            
+            self.xy['x'] += 1
         elif self.loops % 2 == 1:
             self.xy['x'] = len(self.pollution_array)
-	    self.xy['x'] -= sign
-	return
-	   
+            self.xy['x'] -= sign
+        return
+
     '''unit test delete later '''
     def test1(self):
         '''yaw motor test'''
 
         '''yaw clockwise for 3 seconds'''
-        self.command_queue.append(["y", 1540, 3])
+        self.command_queue.append(["y", 1540, 4])
 
         '''yaw ccw for 3 seconds'''
-        self.command_queue.append(["y", 1450, 3])
+        self.command_queue.append(["y", 1450, 4])
 
     '''Performs pre-dive information gathering and checks'''
     def predive_check(self):
@@ -219,16 +218,16 @@ class AUVModule(mp_module.MPModule):
         diff = abs(pwm - 1500)
         ccw_pwm = 1500 - diff
         cw_pwm = 1500 + diff
-        self.y = not self.y  
+        self.y = not self.y
         if offset_from_intended_heading > 0:
             return self.command_queue.append(["y", ccw_pwm, 2])
         else:
             return self.command_queue.append(["y", cw_pwm, 2])
-	 	
+
 
     def go_home(self):
         '''returns to home coordinate'''
-	print ('HOMING')
+        print ('HOMING')
         self.module('rc').override = [1500, 1700, 1500, 1500, 1500, 1500, 1500, 1500]
         self.module('rc').send_rc_override()
         sleep(2)
@@ -258,15 +257,15 @@ class AUVModule(mp_module.MPModule):
     # lateral - 6
     # @param y - indicates whether forward movement is in 'y' direction
     def cmd_move(self, args, y=False):
-        if len(args) != 4:
+        if len(args) != 3:
             return "Usage: move <f|l|z|roll|yaw> pwm"
         elif args[0] == "f":  # forward
-	    self.module('rc').override[4] = args[1]
+            self.module('rc').override[4] = args[1]
             self.module('rc').send_rc_override()
             return self.track_xy(args[1], self.y)
         elif args[0] == "l":  # lateral
             # This is how the joystick module does it
-	    self.module('rc').override[5] = args[1]
+            self.module('rc').override[5] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "z":  # dive/surface
             self.module('rc').override[1] = args[1]
@@ -275,7 +274,7 @@ class AUVModule(mp_module.MPModule):
             self.module('rc').override[2] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "y":  # yaw
-	    self.module('rc').override[3] = args[1]
+            self.module('rc').override[3] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "end_dense":
             self.dense = False
@@ -341,10 +340,13 @@ class AUVModule(mp_module.MPModule):
         with open("/home/pi/sensor_battery.txt", "a+") as f:
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
         self.pollution_array[self.xy['x'], self.xy['y']] = (do, cond, temp)
-	numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
-	print self.xy
+        numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
 
-        return (do >= 14.0, do <= 5.0, cond <= 800.0, temp >= 3000.0, temp <= 1000.0)
+        bound_check = (do >= 14.0, do <= 5.0, cond >= 800.0, temp >= 3000.0, temp <= 1000.0)
+
+        print("%s > %s\n" % (str((do, cond, temp)), str(bound_check)))
+
+        return bound_check
 
     def psensor_update(self, SCALED_PRESSURE3):
         '''update pressure sensor readings'''
@@ -399,16 +401,16 @@ class AUVModule(mp_module.MPModule):
         if any(self.servo_output_raw) or any(self.rc_channels_raw):
             raise PWMError('PWM values out of bounds, disarming')
         elif self.battery_percentage() < 40:
-	    print(2)
+            print(2)
             raise HardwareError([2, 'Low Battery'])
         elif time() - self.time_at_last_heartbeat > 300:
-	    print(3)
+            print(3)
             raise HardwareError([3, 'Lost connection to Pixhawk'])
         elif self.mav_state_critical:
             print(4)
             raise HardwareError([4, 'Critical Condition'])
         elif self.mav_state_emergency:
-	    print(0)
+            print(0)
             raise HardwareError([0, 'Irrecoverable Electrical Failure'])
         return
 
@@ -428,23 +430,23 @@ class AUVModule(mp_module.MPModule):
 
         except PWMError:
             print(PWMError.message)
-	    print ('disarminggggggggggggg')
+            print ('disarminggggggggggggg')
             self.module('arm').disarm('force')
 
         except HardwareError:
-	    print('errrorrrrr')
+            print('errrorrrrr')
             if HardwareError.errno is 2:
-		print(2)
+                print(2)
                 #print(HardwareError.message)
                 #self.go_home()
             elif HardwareError.errno is 3:
-		print(3)
+                print(3)
                 #self.surface_and_disarm(HardwareError.message)
             elif HardwareError.errno is 4:
-		print(4)
+                print(4)
                 #self.surface_and_disarm(HardwareError.message)
             elif HardwareError.errno is 0:
-		print(0)
+                print(0)
                 #self.surface_and_disarm(HardwareError.message)  # try to surface
                 #self.mav.reboot_autopilot()
                 #system('sudo reboot now')
@@ -466,7 +468,7 @@ class AUVModule(mp_module.MPModule):
             try:
                 command=self.command_queue.popleft()
                 self.cmd_move(command)
-		self.end_time = time() + command[2]
+                self.end_time = time() + command[2]
                 self.motor_run_time = command[2]
                 self.ujoules = 0
             # *
@@ -481,12 +483,9 @@ class AUVModule(mp_module.MPModule):
             self.ujoules += self.batt_info()
 
         if now - self.last_sample > 1:
-            self.track_xy()
             self.last_sample = now
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
-	    print self.sample()
             if any(self.sample()) and self.dense is False:
-		print('Densing!')
                 self.command_queue.append(["end_dense", 1600, (self.end_time - self.dense_traverse() - (time() - self.start_time))])
                 self.surface()
         # *
