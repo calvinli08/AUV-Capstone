@@ -3,6 +3,7 @@
 import sys
 import numpy
 import errno
+import json
 from pymavlink import mavutil, mavwp
 from time import strftime, time
 from collections import deque
@@ -22,7 +23,9 @@ class AUVModule(mp_module.MPModule):
         super(AUVModule, self).__init__(mpstate, "auto", "Autonomous navigation module")
 
         '''Navigational information'''
-        self.next_wp = []  # lat,lng
+        self.waypoints = deque()
+        self.next_wp = None  # lat,lng
+        self.reached_wp = False
         self.offset_from_intended_heading = 0
         self.pollution_array = numpy.zeros([100, 100], numpy.dtype(object), 'C')  # initialize later
         self.loops = 0
@@ -90,7 +93,7 @@ class AUVModule(mp_module.MPModule):
             print self.usage()
         elif args[0] == "mission":
             try:
-                self.load_waypoints('/home/pi/wps.txt')
+                self.load_waypoints('/home/pi/waypoints.plan')
             except FileError:
                 print FileError.message
                 return
@@ -110,10 +113,16 @@ class AUVModule(mp_module.MPModule):
         return
 
     def load_waypoints(self, filename):
-        self.module('wp').load_waypoints(filename)
-        self.next_wp = self.wp_loader.wp(0)
+        with (filename, "r") as f:
+            waypoints_dict = json.loads(f.readlines())
+            waypoints_list = waypoints_dict['mission']['items']
+        for wp in waypoints_list:
+            splitted = wp['coordinate'][0:2]
+            self.waypoints.append(tuple([float(coordinate) for coordinate in splitted]))
+
+        self.next_wp = self.waypoints.popleft()
+
         if self.next_wp is None:
-            self.module('arm').cmd_disarm('force')
             raise FileError("Waypoint loading unsuccessful. Please check that the waypoint file is populated.\n")
         return
 
@@ -171,11 +180,11 @@ class AUVModule(mp_module.MPModule):
 
             # Distance to the next waypoint
             self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon,
-                                                             self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+                                                             self.next_wp[0], self.next_wp[1])
 
             # Offset in degrees from the direction of the next waypoint
             self.offset_from_intended_heading = mp_util.gps_bearing(self.lat, self.lon,
-                                                        self.next_wp.MAVLink_mission_item_message.x, self.next_wp.MAVLink_mission_item_message.y)
+                                                                    self.next_wp[0], self.next_wp[1])
 
             # Spins the AUV towards the correct direction
             self.orient_heading(self.offset_from_intended_heading)
@@ -220,9 +229,9 @@ class AUVModule(mp_module.MPModule):
         cw_pwm = 1500 + diff
         self.y = not self.y
         if offset_from_intended_heading > 0:
-            return self.command_queue.append(["y", ccw_pwm, 2])
+            return self.command_queue.append(["y", ccw_pwm, 20])
         else:
-            return self.command_queue.append(["y", cw_pwm, 2])
+            return self.command_queue.append(["y", cw_pwm, 20])
 
 
     def go_home(self):
@@ -281,6 +290,7 @@ class AUVModule(mp_module.MPModule):
             self.module('rc').override[4] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "continue_mission":
+            self.reached_wp = False
             return self.run()
         else:
             return "Usage: move <f|l|z|r|y> pwm seconds"
@@ -370,6 +380,11 @@ class AUVModule(mp_module.MPModule):
         self.vy = GLOBAL_POSITION_INT.vy
         self.vz = GLOBAL_POSITION_INT.vz
         self.hdg = GLOBAL_POSITION_INT.hdg
+        if [self.lat, self.lon] is self.next_wp:
+            self.next_wp = self.waypoints.popleft()
+            self.reached_wp = True
+
+        self.reached_wp = False
 
     def rc_update(self, RC_CHANNELS_RAW):
         #self.rc_channels_raw = [1800 < RC_CHANNELS_RAW[key] < 1200 for key in RC_CHANNELS_RAW.iteritems() if self.rc_regexp.match(key)]
@@ -425,28 +440,28 @@ class AUVModule(mp_module.MPModule):
         '''time motor events, track battery usage, monitor system, and time sensor readings'''
         now = time()
 
-        try:
-            self.hardware_check()
-
-        except PWMError:
-            print(PWMError.message)
-            print ('disarminggggggggggggg')
-            self.module('arm').disarm('force')
-
-        except HardwareError:
-            print('errrorrrrr')
-            if HardwareError.errno is 2:
-                print(2)
-                #print(HardwareError.message)
-                #self.go_home()
-            elif HardwareError.errno is 3:
-                print(3)
-                #self.surface_and_disarm(HardwareError.message)
-            elif HardwareError.errno is 4:
-                print(4)
-                #self.surface_and_disarm(HardwareError.message)
-            elif HardwareError.errno is 0:
-                print(0)
+        # try:
+        #     self.hardware_check()
+        #
+        # except PWMError:
+        #     print(PWMError.message)
+        #     print ('disarminggggggggggggg')
+        #     self.module('arm').disarm('force')
+        #
+        # except HardwareError:
+        #     print('errrorrrrr')
+        #     if HardwareError.errno is 2:
+        #         print(2)
+        #         #print(HardwareError.message)
+        #         #self.go_home()
+        #     elif HardwareError.errno is 3:
+        #         print(3)
+        #         #self.surface_and_disarm(HardwareError.message)
+        #     elif HardwareError.errno is 4:
+        #         print(4)
+        #         #self.surface_and_disarm(HardwareError.message)
+        #     elif HardwareError.errno is 0:
+                #print(0)
                 #self.surface_and_disarm(HardwareError.message)  # try to surface
                 #self.mav.reboot_autopilot()
                 #system('sudo reboot now')
@@ -459,6 +474,15 @@ class AUVModule(mp_module.MPModule):
                 self.module('rc').send_rc_override()
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
+
+        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 4:
+            self.module('rc').stop()
+            self.end_time = 0
+
+        if self.reached_wp:
+            self.module('rc').stop()
+            self.write_to_battery.append("uJoules: %s, Run time: %s, Time: %s \n" % (self.ujoules, self.motor_run_time, strftime("%H:%M:%S")))
+            self.cmd_move(["continue_mission", 1500, 0])
 
         # extremely time critical, as the code must send the next 'rc' cmd before the 3 second disarm timeout
         if self.end_time <= time():
@@ -597,7 +621,7 @@ class AUVModule(mp_module.MPModule):
 
             present = ((m.onboard_control_sensors_present & bits) == bits)
             if self.module('fence').present is False and present is True:
-                self.say("fence present")
+                self.say("fence present")            self.module('arm').cmd_disarm('force')
             elif self.module('fence').present is True and present is False:
                 self.say("fence removed")
             self.present = present
