@@ -14,7 +14,7 @@ from re import match, search, compile
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
-from MAVProxy.modules import SerialReader
+#from MAVProxy.modules import SerialReader
 
 
 class AUVModule(mp_module.MPModule):
@@ -25,6 +25,7 @@ class AUVModule(mp_module.MPModule):
         '''Navigational information'''
         self.waypoints = deque()
         self.next_wp = None  # lat,lng
+        self.wp_perimeter = ()
         self.reached_wp = False
         self.offset_from_intended_heading = 0
         self.pollution_array = numpy.zeros([100, 100], numpy.dtype(object), 'C')  # initialize later
@@ -66,7 +67,7 @@ class AUVModule(mp_module.MPModule):
 
         '''Sampling'''
         self.last_sample = time()
-        self.sensor_reader = SerialReader.SerialReader()
+        #self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['home', 'test', 'mission', 'setfence'])
@@ -93,7 +94,7 @@ class AUVModule(mp_module.MPModule):
             print self.usage()
         elif args[0] == "mission":
             try:
-                self.load_waypoints('/home/pi/waypoints.plan')
+                self.load_waypoints('/home/calvin/waypoints.plan')
             except FileError:
                 print FileError.message
                 return
@@ -113,15 +114,15 @@ class AUVModule(mp_module.MPModule):
         return
 
     def load_waypoints(self, filename):
-        with (filename, "r") as f:
-            waypoints_dict = json.loads(f.readlines())
+        with open(filename, "r") as f:
+            waypoints_dict = json.load(f)
             waypoints_list = waypoints_dict['mission']['items']
         for wp in waypoints_list:
-            splitted = wp['coordinate'][0:2]
-            self.waypoints.append(tuple([float(coordinate) for coordinate in splitted]))
+            self.waypoints.append(tuple(wp['coordinate'][0:2]))
 
         self.next_wp = self.waypoints.popleft()
-
+        self.wp_perimeter = (self.next_wp[0] += 0.0005, self.next_wp[1] += 0.0005, self.next_wp[0] -= 0.0005, self.next_wp[1] -= 0.0005)
+        print(self.next_wp)
         if self.next_wp is None:
             raise FileError("Waypoint loading unsuccessful. Please check that the waypoint file is populated.\n")
         return
@@ -166,9 +167,9 @@ class AUVModule(mp_module.MPModule):
     def predive_check(self):
         if self.next_wp == None:
             raise ValueError('self.next_wp is None')
-        if self.battery >= 60.0:
+        if self.battery_percentage() >= 60.0:
             return
-        elif 55.0 <= self.battery < 60.0:
+        elif 55.0 <= self.battery_percentage() < 60.0:
             return
         else:
             raise HardwareError([1, 'Insufficient Battery'])
@@ -207,7 +208,8 @@ class AUVModule(mp_module.MPModule):
             return self.go_home()
 
         except ValueError:
-            print(ValueError.message)
+            print(ValueError)
+            print('eyyyy')
             return self.go_home()
 
         return numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
@@ -380,8 +382,10 @@ class AUVModule(mp_module.MPModule):
         self.vy = GLOBAL_POSITION_INT.vy
         self.vz = GLOBAL_POSITION_INT.vz
         self.hdg = GLOBAL_POSITION_INT.hdg
-        if [self.lat, self.lon] is self.next_wp:
+        '''Four decimal places of precision are required to notice changes in position'''
+        if (self.wp_perimeter[2], self.wp_perimeter[3]) <= (self.lat, self.lon) and (self.lat, self.lon) <= (self.wp_perimeter[0], self.wp_perimeter[1]):
             self.next_wp = self.waypoints.popleft()
+            self.wp_perimeter = (self.next_wp[0] += 0.0005, self.next_wp[1] += 0.0005, self.next_wp[0] -= 0.0005, self.next_wp[1] -= 0.0005)
             self.reached_wp = True
 
         self.reached_wp = False
@@ -475,9 +479,9 @@ class AUVModule(mp_module.MPModule):
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
 
-        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 4:
-            self.module('rc').stop()
-            self.end_time = 0
+        # if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 4:
+        #     self.module('rc').stop()
+        #     self.end_time = 0
 
         if self.reached_wp:
             self.module('rc').stop()
@@ -621,7 +625,7 @@ class AUVModule(mp_module.MPModule):
 
             present = ((m.onboard_control_sensors_present & bits) == bits)
             if self.module('fence').present is False and present is True:
-                self.say("fence present")            self.module('arm').cmd_disarm('force')
+                self.say("fence present")
             elif self.module('fence').present is True and present is False:
                 self.say("fence removed")
             self.present = present
