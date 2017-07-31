@@ -94,7 +94,7 @@ class AUVModule(mp_module.MPModule):
             print self.usage()
         elif args[0] == "mission":
             try:
-                self.load_waypoints('/home/calvin/waypoints.plan')
+                self.load_waypoints('/home/pi/waypoints.plan')
             except FileError:
                 print FileError.message
                 return
@@ -131,7 +131,7 @@ class AUVModule(mp_module.MPModule):
         '''calculate length of geofence rectangle sides'''
         points = distance_between_points = p = []
         print(1)
-        with open('/home/calvin/fence.txt', "r") as f:
+        with open('/home/pi/fence.txt', "r") as f:
             for line in f:
                 p = line.strip().split(',')
                 for i in range(len(p)):
@@ -223,7 +223,7 @@ class AUVModule(mp_module.MPModule):
             print('Value Error')
             return self.go_home()
 
-        return numpy.save('/home/calvin/pollution_array.npy', self.pollution_array)
+        return numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
@@ -361,11 +361,11 @@ class AUVModule(mp_module.MPModule):
         cond = float(self.sensor_reader.read("3").rstrip())
         temp = self.temp_sensor[2]
 
-        with open("/home/calvin/sensor_battery.txt", "a+") as f:
+        with open("/home/pi/sensor_battery.txt", "a+") as f:
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
 
         self.pollution_array[self.xy['x'], self.xy['y']] = (do, cond, temp)
-        numpy.save('/home/calvin/pollution_array.npy', self.pollution_array)
+        numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
 
         bound_check = (do >= 14.0, do <= 5.0, cond >= 800.0, temp >= 3000.0, temp <= 1000.0)
 
@@ -515,7 +515,7 @@ class AUVModule(mp_module.MPModule):
             # *
             except IndexError:
                 self.end_time = time() + 1
-                with open("/home/calvin/motor_battery.txt", "a+") as f:
+                with open("/home/pi/motor_battery.txt", "a+") as f:
                     f.write(''.join(self.write_to_battery))
                 self.write_to_battery = []
 
