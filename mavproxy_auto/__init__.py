@@ -121,23 +121,29 @@ class AUVModule(mp_module.MPModule):
             self.waypoints.append(tuple(wp['coordinate'][0:2]))
 
         self.next_wp = self.waypoints.popleft()
-        self.wp_perimeter = (self.next_wp[0] += 0.0005, self.next_wp[1] += 0.0005, self.next_wp[0] -= 0.0005, self.next_wp[1] -= 0.0005)
-        print(self.next_wp)
+        self.wp_perimeter = (self.next_wp[0] + 0.0005, self.next_wp[1] + 0.0005, self.next_wp[0] - 0.0005, self.next_wp[1] - 0.0005)
+
         if self.next_wp is None:
             raise FileError("Waypoint loading unsuccessful. Please check that the waypoint file is populated.\n")
         return
 
     def calculate_geofence_edge_lengths(self):
         '''calculate length of geofence rectangle sides'''
-        f = open('/home/pi/fence.txt', "r")
-        points = []
-        p = []
-        for line in f:
-            p = f.readline().split()
-            points.append([p[0], p[1]])
-        distance_between_points = []
-        for x in range(len(points)-1):
-            distance_between_points.append(mp_util.gps_distance(points[x][0], points[x][1], points[x+1][0], points[x+1][1]))
+        points = distance_between_points = p = []
+        print(1)
+        with open('/home/calvin/fence.txt', "r") as f:
+            for line in f:
+                p = line.strip().split(',')
+                for i in range(len(p)):
+                    p[i] = float(p[i])
+                points.append(p)
+        for x in range(len(points)):
+            if x+1 is len(points):
+                distance_between_points.append(mp_util.gps_distance(points[x][0], points[x][1], points[0][0], points[0][1]))
+                print(mp_util.gps_distance(points[x][0], points[x][1], points[0][0], points[0][1]))
+            else:
+                distance_between_points.append(mp_util.gps_distance(points[x][0], points[x][1], points[x+1][0], points[x+1][1]))
+
         return (min(distance_between_points), max(distance_between_points))  # width, length
 
     def load_geofence_points(self, filename):
@@ -165,18 +171,22 @@ class AUVModule(mp_module.MPModule):
 
     '''Performs pre-dive information gathering and checks'''
     def predive_check(self):
-        if self.next_wp == None:
+        if not self.next_wp:
             raise ValueError('self.next_wp is None')
         if self.battery_percentage() >= 60.0:
             return
         elif 55.0 <= self.battery_percentage() < 60.0:
             return
         else:
-            raise HardwareError([1, 'Insufficient Battery'])
+            #raise HardwareError([1, 'Insufficient Battery'])
+            return
 
     def run(self):
         '''Main command loop for the mission'''
         try:
+
+            print("Traveling to: %s\n" % (str(self.next_wp)))
+
             self.predive_check()  # checks that auv is ready to dive, throws exception if not
 
             # Distance to the next waypoint
@@ -191,8 +201,8 @@ class AUVModule(mp_module.MPModule):
             self.orient_heading(self.offset_from_intended_heading)
 
             # Sets the size of the pollution array
-            array_edges = self.calculate_geofence_edge_lengths()
-            self.pollution_array = numpy.zeros([array_edges[0], array_edges[1]], numpy.dtype(object), 'C')  # each square meter is a point
+            #array_edges = self.calculate_geofence_edge_lengths()
+            self.pollution_array = numpy.zeros([150, 150], numpy.dtype(object), 'C')  # each square meter is a point
 
             # self.dive()
 
@@ -205,14 +215,15 @@ class AUVModule(mp_module.MPModule):
 
         except HardwareError:
             print(HardwareError.message)
+            print('Hardware Error')
             return self.go_home()
 
         except ValueError:
             print(ValueError)
-            print('eyyyy')
+            print('Value Error')
             return self.go_home()
 
-        return numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
+        return numpy.save('/home/calvin/pollution_array.npy', self.pollution_array)
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
@@ -229,7 +240,7 @@ class AUVModule(mp_module.MPModule):
         diff = abs(pwm - 1500)
         ccw_pwm = 1500 - diff
         cw_pwm = 1500 + diff
-        self.y = not self.y
+
         if offset_from_intended_heading > 0:
             return self.command_queue.append(["y", ccw_pwm, 20])
         else:
@@ -238,7 +249,7 @@ class AUVModule(mp_module.MPModule):
 
     def go_home(self):
         '''returns to home coordinate'''
-        print ('HOMING')
+        print ('Returning Home\n')
         self.module('rc').override = [1500, 1700, 1500, 1500, 1500, 1500, 1500, 1500]
         self.module('rc').send_rc_override()
         sleep(2)
@@ -266,14 +277,14 @@ class AUVModule(mp_module.MPModule):
     # yaw - 4
     # forward - 5
     # lateral - 6
-    # @param y - indicates whether forward movement is in 'y' direction
     def cmd_move(self, args, y=False):
         if len(args) != 3:
             return "Usage: move <f|l|z|roll|yaw> pwm"
         elif args[0] == "f":  # forward
+            print('forward')
             self.module('rc').override[4] = args[1]
             self.module('rc').send_rc_override()
-            return self.track_xy(args[1], self.y)
+            return self.track_xy(args[1])
         elif args[0] == "l":  # lateral
             # This is how the joystick module does it
             self.module('rc').override[5] = args[1]
@@ -285,6 +296,7 @@ class AUVModule(mp_module.MPModule):
             self.module('rc').override[2] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "y":  # yaw
+            print('yaw')
             self.module('rc').override[3] = args[1]
             return self.module('rc').send_rc_override()
         elif args[0] == "end_dense":
@@ -349,10 +361,11 @@ class AUVModule(mp_module.MPModule):
         cond = float(self.sensor_reader.read("3").rstrip())
         temp = self.temp_sensor[2]
 
-        with open("/home/pi/sensor_battery.txt", "a+") as f:
+        with open("/home/calvin/sensor_battery.txt", "a+") as f:
             f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
+
         self.pollution_array[self.xy['x'], self.xy['y']] = (do, cond, temp)
-        numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
+        numpy.save('/home/calvin/pollution_array.npy', self.pollution_array)
 
         bound_check = (do >= 14.0, do <= 5.0, cond >= 800.0, temp >= 3000.0, temp <= 1000.0)
 
@@ -385,7 +398,7 @@ class AUVModule(mp_module.MPModule):
         '''Four decimal places of precision are required to notice changes in position'''
         if (self.wp_perimeter[2], self.wp_perimeter[3]) <= (self.lat, self.lon) and (self.lat, self.lon) <= (self.wp_perimeter[0], self.wp_perimeter[1]):
             self.next_wp = self.waypoints.popleft()
-            self.wp_perimeter = (self.next_wp[0] += 0.0005, self.next_wp[1] += 0.0005, self.next_wp[0] -= 0.0005, self.next_wp[1] -= 0.0005)
+            self.wp_perimeter = (self.next_wp[0] + 0.0005, self.next_wp[1] + 0.0005, self.next_wp[0] - 0.0005, self.next_wp[1] - 0.0005)
             self.reached_wp = True
 
         self.reached_wp = False
@@ -479,9 +492,9 @@ class AUVModule(mp_module.MPModule):
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
 
-        # if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 4:
-        #     self.module('rc').stop()
-        #     self.end_time = 0
+        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 4:
+             self.module('rc').stop()
+             self.end_time = 0
 
         if self.reached_wp:
             self.module('rc').stop()
@@ -502,7 +515,7 @@ class AUVModule(mp_module.MPModule):
             # *
             except IndexError:
                 self.end_time = time() + 1
-                with open("/home/pi/motor_battery.txt", "a+") as f:
+                with open("/home/calvin/motor_battery.txt", "a+") as f:
                     f.write(''.join(self.write_to_battery))
                 self.write_to_battery = []
 
@@ -514,6 +527,7 @@ class AUVModule(mp_module.MPModule):
             self.last_sample = now
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
             if any(self.sample()) and self.dense is False:
+                print('Pollution information exceeding threshold, starting dense traversal\n')
                 self.command_queue.append(["end_dense", 1600, (self.end_time - self.dense_traverse() - (time() - self.start_time))])
                 self.surface()
         # *
