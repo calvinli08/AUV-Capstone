@@ -4,7 +4,6 @@ import sys
 import numpy
 import errno
 import json
-import curses
 from pymavlink import mavutil, mavwp
 from time import strftime, time
 from collections import deque
@@ -25,24 +24,17 @@ class AUVModule(mp_module.MPModule):
 
         '''Navigational information'''
         self.waypoints = deque()
-        self.next_wp = None  # lat,lng
+        self.next_wp = [0, 0]  # lat,lng
         self.wp_perimeter = ()
         self.reached_wp = False
         self.offset_from_intended_heading = 0
-        self.pollution_array = numpy.zeros([100, 100], numpy.dtype(object), 'C')  # initialize later
+        self.orienting = False
         self.loops = 0
         self.xy = {'x': 0, 'y': 0}  # x,y
         self.y = True
         self.dense = False
         self.start_time = 0
         self.home = {'lat': 0, 'lng': 0}
-
-        '''GPS output'''
-        self.gps_disp = curses.newwin(7, 70, 4, 5)
-        self.gps_disp.keypad(True)
-        self.gps_disp.clear()
-        curses.noecho()
-        curses.cbreak()
 
         '''Attitude'''
         self.lat = 0
@@ -208,10 +200,6 @@ class AUVModule(mp_module.MPModule):
             # Spins the AUV towards the correct direction
             self.orient_heading(self.offset_from_intended_heading)
 
-            # Sets the size of the pollution array
-            #array_edges = self.calculate_geofence_edge_lengths()
-            self.pollution_array = numpy.zeros([150, 150], numpy.dtype(object), 'C')  # each square meter is a point
-
             # self.dive()
 
             self.underwater_traverse(self.distance_to_waypoint)
@@ -249,11 +237,12 @@ class AUVModule(mp_module.MPModule):
         ccw_pwm = 1500 - diff
         cw_pwm = 1500 + diff
 
+        self.orienting = True
+
         if offset_from_intended_heading > 0:
             return self.command_queue.append(["y", ccw_pwm, 20])
         else:
             return self.command_queue.append(["y", cw_pwm, 20])
-
 
     def go_home(self):
         '''returns to home coordinate'''
@@ -369,15 +358,12 @@ class AUVModule(mp_module.MPModule):
         cond = float(self.sensor_reader.read("3").rstrip())
         temp = self.temp_sensor[2]
 
-        with open("/home/pi/sensor_battery.txt", "a+") as f:
-            f.write("DO: %s, Cond: %s, Temp: %s, Lat: %s, Long: %s, uWatts: %s, Time: %s \n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
+        with open("/home/pi/sensor_data.txt", "a+") as f:
+            f.write("{'DO': %s, 'Cond': %s, 'Temp': %s, 'Lat': %s, 'Long': %s, 'uWatts': %s, 'Time': %s}\n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
 
-        self.pollution_array[self.xy['x'], self.xy['y']] = (do, cond, temp)
-        numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
+        bound_check = any((do >= 14.0, do <= 5.0, cond >= 800.0, temp >= 3000.0, temp <= 1000.0))
 
-        bound_check = (do >= 14.0, do <= 5.0, cond >= 800.0, temp >= 3000.0, temp <= 1000.0)
-
-        print("%s > %s\n" % (str((do, cond, temp)), str(bound_check)))
+        print("(DO: %s, Cond: %s, Temp: %s) > %s\n" % (str(do), str(cond), str(temp), str(bound_check)))
 
         return bound_check
 
@@ -409,8 +395,7 @@ class AUVModule(mp_module.MPModule):
             self.wp_perimeter = (self.next_wp[0] + 0.0005, self.next_wp[1] + 0.0005, self.next_wp[0] - 0.0005, self.next_wp[1] - 0.0005)
             self.reached_wp = True
 
-        self.gps_disp.addstr(4, 7, "GPS: (lat: %s, long: %s, hdg: %s)\n" %(self.lat, self.long, self.hdg))
-        self.gps_disp.refresh()
+        print("GPS: (lat: %s, long: %s, hdg: %s)\n" % (self.lat, self.long, self.hdg))
 
         self.reached_wp = False
 
@@ -503,9 +488,10 @@ class AUVModule(mp_module.MPModule):
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
 
-        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 2:
-             self.module('rc').stop()
-             self.end_time = 0
+        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 2 and self.orienting is True:
+            self.module('rc').stop()
+            self.end_time = 0
+            self.orienting = False
 
         if self.reached_wp:
             self.module('rc').stop()
@@ -537,7 +523,7 @@ class AUVModule(mp_module.MPModule):
         if now - self.last_sample > 1:
             self.last_sample = now
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
-            if any(self.sample()) and self.dense is False:
+            if self.sample() and self.dense is False:
                 print('Pollution information exceeding threshold, starting dense traversal\n')
                 self.command_queue.append(["end_dense", 1600, (self.end_time - self.dense_traverse() - (time() - self.start_time))])
                 self.surface()
