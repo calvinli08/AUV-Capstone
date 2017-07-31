@@ -4,6 +4,7 @@ import sys
 import numpy
 import errno
 import json
+import curses
 from pymavlink import mavutil, mavwp
 from time import strftime, time
 from collections import deque
@@ -14,7 +15,7 @@ from re import match, search, compile
 from MAVProxy.modules.lib import mp_module
 from MAVProxy.modules.lib import mp_util
 from MAVProxy.modules.lib import mp_settings
-#from MAVProxy.modules import SerialReader
+from MAVProxy.modules import SerialReader
 
 
 class AUVModule(mp_module.MPModule):
@@ -35,6 +36,13 @@ class AUVModule(mp_module.MPModule):
         self.dense = False
         self.start_time = 0
         self.home = {'lat': 0, 'lng': 0}
+
+        '''GPS output'''
+        self.gps_disp = curses.newwin(7, 70, 4, 5)
+        self.gps_disp.keypad(True)
+        self.gps_disp.clear()
+        curses.noecho()
+        curses.cbreak()
 
         '''Attitude'''
         self.lat = 0
@@ -67,7 +75,7 @@ class AUVModule(mp_module.MPModule):
 
         '''Sampling'''
         self.last_sample = time()
-        #self.sensor_reader = SerialReader.SerialReader()
+        self.sensor_reader = SerialReader.SerialReader()
 
         ''' Commands for operating the module from the MAVProxy CLI'''
         self.add_command('auto', self.cmd_auto, "Autonomous sampling traversal", ['home', 'test', 'mission', 'setfence'])
@@ -401,6 +409,9 @@ class AUVModule(mp_module.MPModule):
             self.wp_perimeter = (self.next_wp[0] + 0.0005, self.next_wp[1] + 0.0005, self.next_wp[0] - 0.0005, self.next_wp[1] - 0.0005)
             self.reached_wp = True
 
+        self.gps_disp.addstr(4, 7, "GPS: (lat: %s, long: %s, hdg: %s)\n" %(self.lat, self.long, self.hdg))
+        self.gps_disp.refresh()
+
         self.reached_wp = False
 
     def rc_update(self, RC_CHANNELS_RAW):
@@ -492,7 +503,7 @@ class AUVModule(mp_module.MPModule):
                 if self.module('rc').override_counter > 0:
                     self.module('rc').override_counter -= 1
 
-        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 4:
+        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 2:
              self.module('rc').stop()
              self.end_time = 0
 
