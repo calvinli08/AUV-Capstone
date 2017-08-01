@@ -469,14 +469,14 @@ class AUVModule(mp_module.MPModule):
                 #self.mav.reboot_autopilot()
                 #system('sudo reboot now')
 
-        # if self.module('rc').override_period.trigger():
-        #     if (self.module('rc').override != [1500] * 16 or
-        #         self.module('rc').override != self.module('rc').last_override or
-        #         self.module('rc').override_counter > 0):
-        #         self.module('rc').last_override = self.module('rc').override[:]
-        #         self.module('rc').send_rc_override()
-        #         if self.module('rc').override_counter > 0:
-        #             self.module('rc').override_counter -= 1
+        if self.module('rc').override_period.trigger():
+             if (self.module('rc').override != [1500] * 16 or
+                 self.module('rc').override != self.module('rc').last_override or
+                 self.module('rc').override_counter > 0):
+                 self.module('rc').last_override = self.module('rc').override[:]
+                 self.module('rc').send_rc_override()
+                 if self.module('rc').override_counter > 0:
+                     self.module('rc').override_counter -= 1
 
         if self.orienting is True and now - self.last_orient_check > 5:
             self.module('rc').stop()
