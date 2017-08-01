@@ -3,7 +3,7 @@
 import sys
 import numpy
 import errno
-import json
+from json import load
 from pymavlink import mavutil, mavwp
 from time import strftime, time
 from collections import deque
@@ -25,7 +25,7 @@ class AUVModule(mp_module.MPModule):
         '''Navigational information'''
         self.waypoints = deque()
         self.next_wp = [0, 0]  # lat,lng
-        self.wp_perimeter = ()
+        self.wp_perimeter = (0, 0, 0, 0)
         self.reached_wp = False
         self.offset_from_intended_heading = 0
         self.orienting = False
@@ -58,12 +58,11 @@ class AUVModule(mp_module.MPModule):
         self.temp_sensor = [0] * 3
         self.depth_sensor = [0] * 3
 
-        self.last_waypoint = None
-
         '''Infinite sized queue for motor commands'''
         self.command_queue = deque()
         self.end_time = 0
         self.motor_run_time = 0
+        self.last_orient_check = 0
 
         '''Sampling'''
         self.last_sample = time()
@@ -103,8 +102,6 @@ class AUVModule(mp_module.MPModule):
             self.load_geofence_points('home/pi/fence.txt')
             self.calculate_geofence_edge_lengths()
             return
-        elif args[0] == "test":
-            print self.test1()
         elif args[0] == "home":
             self.home['lat'] = args[1]  # lat
             self.home['lng'] = args[2]  # lng
@@ -115,7 +112,7 @@ class AUVModule(mp_module.MPModule):
 
     def load_waypoints(self, filename):
         with open(filename, "r") as f:
-            waypoints_dict = json.load(f)
+            waypoints_dict = load(f)
             waypoints_list = waypoints_dict['mission']['items']
         for wp in waypoints_list:
             self.waypoints.append(tuple(wp['coordinate'][0:2]))
@@ -158,16 +155,6 @@ class AUVModule(mp_module.MPModule):
             self.xy['x'] = len(self.pollution_array)
             self.xy['x'] -= sign
         return
-
-    '''unit test delete later '''
-    def test1(self):
-        '''yaw motor test'''
-
-        '''yaw clockwise for 3 seconds'''
-        self.command_queue.append(["y", 1540, 4])
-
-        '''yaw ccw for 3 seconds'''
-        self.command_queue.append(["y", 1450, 4])
 
     '''Performs pre-dive information gathering and checks'''
     def predive_check(self):
@@ -219,7 +206,7 @@ class AUVModule(mp_module.MPModule):
             print('Value Error')
             return self.go_home()
 
-        return numpy.save('/home/pi/pollution_array.npy', self.pollution_array)
+        return
 
     # traverse
     # assuming: one second = one meter, 2 seconds delay
@@ -232,25 +219,27 @@ class AUVModule(mp_module.MPModule):
     def dive(self, time=3):
         return self.command_queue.append(["z", 1450, time])
 
-    def orient_heading(self, offset_from_intended_heading, pwm=1550):
+    def orient_heading(self, offset_from_intended_heading, pwm=1520):
         diff = abs(pwm - 1500)
         ccw_pwm = 1500 - diff
         cw_pwm = 1500 + diff
 
         self.orienting = True
 
+        self.last_orient_check = time()
+
         if offset_from_intended_heading > 0:
-            return self.command_queue.append(["y", ccw_pwm, 20])
+            return self.command_queue.append(["y", ccw_pwm, 10])
         else:
-            return self.command_queue.append(["y", cw_pwm, 20])
+            return self.command_queue.append(["y", cw_pwm, 10])
 
     def go_home(self):
         '''returns to home coordinate'''
         print ('Returning Home\n')
         self.module('rc').override = [1500, 1700, 1500, 1500, 1500, 1500, 1500, 1500]
         self.module('rc').send_rc_override()
-        sleep(2)
 
+        sleep(2)
         # Distance to the next waypoint
         self.distance_to_waypoint = mp_util.gps_distance(self.lat, self.lon, self.home[lat], self.home[lng])
 
@@ -315,7 +304,7 @@ class AUVModule(mp_module.MPModule):
         return self.traverse(distance+1)
 
     ''' dense traverse function that is called when pollution is above a threshold'''
-    def dense_traverse(self, forward_increment=3, pwm=1550, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
+    def dense_traverse(self, forward_increment=3, forward_distance_to_edge=10, loop_number=3, forward_travel_distance=5, sideways_distance=4, current=0):
 
         self.module('rc').stop()
         self.command_queue.clear()
@@ -327,23 +316,23 @@ class AUVModule(mp_module.MPModule):
         elif self.loops < sideways_distance:
             sideways_distance = sideways_distance/2
 
-        self.orient_heading(90, pwm)
+        self.orient_heading(90)
         self.traverse(sideways_distance)
 
         turn_direction = -90
         for j in xrange(forward_travel_distance):
-            self.orient_heading(turn_direction, pwm)
+            self.orient_heading(turn_direction)
             self.traverse(forward_increment)
-            self.orient_heading(turn_direction, pwm)
+            self.orient_heading(turn_direction)
             self.traverse(sideways_distance)
             turn_direction *= -1
 
-        self.orient_heading(turn_direction, pwm)
+        self.orient_heading(turn_direction)
         self.traverse(3)
-        self.orient_heading(turn_direction, pwm)
+        self.orient_heading(turn_direction)
         self.traverse(sideways_distance/2)
         turn_direction *= -1
-        self.orient_heading(turn_direction, pwm)
+        self.orient_heading(turn_direction)
 
         remaining_distance = end_time - forward_travel_distance - elapsed_time
         end_time = int(time()) + remaining_distance + 1
@@ -356,7 +345,7 @@ class AUVModule(mp_module.MPModule):
     def sample(self):
         do = float(self.sensor_reader.read("2").rstrip())
         cond = float(self.sensor_reader.read("3").rstrip())
-        temp = self.temp_sensor[2]
+        temp = float(self.temp_sensor[2])/100.0
 
         with open("/home/pi/sensor_data.txt", "a+") as f:
             f.write("{'DO': %s, 'Cond': %s, 'Temp': %s, 'Lat': %s, 'Long': %s, 'uWatts': %s, 'Time': %s}\n" % (do, cond, temp, self.lat, self.lon, self.batt_info(), strftime("%H:%M:%S")))  # DO, Conductivity, Temperature, Lat, Lng, microWatts, time
@@ -381,8 +370,8 @@ class AUVModule(mp_module.MPModule):
 
     def gps_update(self, GLOBAL_POSITION_INT):
         '''update gps readings'''
-        self.lat = GLOBAL_POSITION_INT.lat
-        self.lon = GLOBAL_POSITION_INT.lon
+        self.lat = float(GLOBAL_POSITION_INT.lat)/10000000.0
+        self.lon = float(GLOBAL_POSITION_INT.lon)/10000000.0
         self.alt = GLOBAL_POSITION_INT.alt
         self.relative_alt = GLOBAL_POSITION_INT.relative_alt
         self.vx = GLOBAL_POSITION_INT.vx
@@ -395,7 +384,8 @@ class AUVModule(mp_module.MPModule):
             self.wp_perimeter = (self.next_wp[0] + 0.0005, self.next_wp[1] + 0.0005, self.next_wp[0] - 0.0005, self.next_wp[1] - 0.0005)
             self.reached_wp = True
 
-        print("GPS: (lat: %s, long: %s, hdg: %s)\n" % (self.lat, self.long, self.hdg))
+        sys.stdout.write("\rGPS: (lat: %s, long: %s, hdg: %s%s)" % (self.lat, self.lon, self.hdg, ' '*20))
+        sys.stdout.flush()
 
         self.reached_wp = False
 
@@ -479,19 +469,23 @@ class AUVModule(mp_module.MPModule):
                 #self.mav.reboot_autopilot()
                 #system('sudo reboot now')
 
-        if self.module('rc').override_period.trigger():
-            if (self.module('rc').override != [1500] * 16 or
-                self.module('rc').override != self.module('rc').last_override or
-                self.module('rc').override_counter > 0):
-                self.module('rc').last_override = self.module('rc').override[:]
-                self.module('rc').send_rc_override()
-                if self.module('rc').override_counter > 0:
-                    self.module('rc').override_counter -= 1
+        # if self.module('rc').override_period.trigger():
+        #     if (self.module('rc').override != [1500] * 16 or
+        #         self.module('rc').override != self.module('rc').last_override or
+        #         self.module('rc').override_counter > 0):
+        #         self.module('rc').last_override = self.module('rc').override[:]
+        #         self.module('rc').send_rc_override()
+        #         if self.module('rc').override_counter > 0:
+        #             self.module('rc').override_counter -= 1
 
-        if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 2 and self.orienting is True:
+        if self.orienting is True and now - self.last_orient_check > 5:
             self.module('rc').stop()
+            sleep(1)
             self.end_time = 0
-            self.orienting = False
+            if mp_util.gps_bearing(self.lat, self.lon, self.next_wp[0], self.next_wp[1]) <= 500:
+                self.orienting = False
+            else:
+                self.command_queue.appendleft(['y', 1520, 10])
 
         if self.reached_wp:
             self.module('rc').stop()
@@ -502,7 +496,7 @@ class AUVModule(mp_module.MPModule):
         if self.end_time <= time():
             self.module('rc').stop()  # this resets the disarm timer
             # * Code between asterisks must execute in under 3 seconds to keep auv armed
-            self.write_to_battery.append("uJoules: %s, Run time: %s, Time: %s \n" % (self.ujoules, self.motor_run_time, strftime("%H:%M:%S")))
+            self.write_to_battery.append("{'uJoules': %s, 'Run time': %s, 'Time': %s}\n" % (self.ujoules, self.motor_run_time, strftime("%H:%M:%S")))
             try:
                 command=self.command_queue.popleft()
                 self.cmd_move(command)
